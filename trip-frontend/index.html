@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TravelOrbit Trip Planner</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h1>🌍 TravelOrbit Trip Planner</h1>
+
+    <!-- Session Setup -->
+    <div class="session-box">
+        <h2>Start Trip Session</h2>
+        <input id="registerId" placeholder="Register ID (ex: user123)">
+        <input id="email" placeholder="Email (ex: test@example.com)">
+        <button onclick="startSession()">Start Session</button>
+
+        <p id="sessionStatus"></p>
+    </div>
+
+    <!-- Chat Box -->
+    <div class="chat-box" id="chatBox"></div>
+
+    <div class="chat-input">
+        <input id="userMessage" placeholder="Type your message..." />
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <!-- Itinerary Box -->
+    <div id="itinerary" class="itinerary hidden"></div>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

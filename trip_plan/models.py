@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
     Column, String, Integer, Date, DateTime,
@@ -8,12 +7,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
-from app.database import Base
+from auth.app.database import Base
 
 
-# -------------------------------------------------------------------
-# MAIN TRIP TABLE
-# -------------------------------------------------------------------
+# ---------- MAIN TRIP TABLE ----------
 class Trip(Base):
     __tablename__ = "trips"
 
@@ -64,9 +61,7 @@ class Trip(Base):
     )
 
 
-# -------------------------------------------------------------------
-# CHAT HISTORY TABLE
-# -------------------------------------------------------------------
+# ---------- CHAT HISTORY ----------
 class TripMessage(Base):
     __tablename__ = "trip_messages"
 
@@ -80,17 +75,14 @@ class TripMessage(Base):
     message_type = Column(String, nullable=True)  # 'question', 'answer', 'summary', etc.
 
     content = Column(Text, nullable=False)
-    message_metadata = Column(JSONB, nullable=True)  # renamed from 'metadata' (reserved!)
+    message_metadata = Column(JSONB, nullable=True)  # renamed from 'metadata'
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relationship
     trip = relationship("Trip", back_populates="messages")
 
 
-# -------------------------------------------------------------------
-# PAYMENT TABLE
-# -------------------------------------------------------------------
+# ---------- PAYMENT ----------
 class Payment(Base):
     __tablename__ = "payments"
 
@@ -100,7 +92,7 @@ class Payment(Base):
     register_id = Column(String, index=True, nullable=False)
     email = Column(String, index=True, nullable=False)
 
-    provider = Column(String, default="stripe")  # Clerk uses Stripe
+    provider = Column(String, default="stripe")  # via Clerk Billing
     clerk_user_id = Column(String, nullable=True)
     provider_payment_id = Column(String, nullable=True)  # Stripe session/PI id
 
@@ -111,9 +103,7 @@ class Payment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
-# -------------------------------------------------------------------
-# FEEDBACK TABLE
-# -------------------------------------------------------------------
+# ---------- FEEDBACK ----------
 class Feedback(Base):
     __tablename__ = "trip_feedback"
 
@@ -123,7 +113,9 @@ class Feedback(Base):
     register_id = Column(String, index=True, nullable=False)
     email = Column(String, index=True, nullable=False)
 
-    rating = Column(Integer, nullable=False)  # 1–5 stars
+    rating = Column(Integer, nullable=False)  # 1–5
     comments = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+google_calendar_event_id = Column(String, nullable=True)

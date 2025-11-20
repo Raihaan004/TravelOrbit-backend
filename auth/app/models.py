@@ -2,6 +2,15 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from datetime import datetime, timedelta
 from .database import Base
 
+class GoogleTokens(Base):
+    __tablename__ = "google_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True)
+    access_token = Column(String)
+    refresh_token = Column(String)
+    token_expiry = Column(DateTime)
+
 class User(Base):
     __tablename__ = "users"
 

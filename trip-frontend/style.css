@@ -1,0 +1,123 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #eef1f5;
+    padding: 40px;
+}
+
+.container {
+    max-width: 700px;
+    margin: auto;
+    background: white;
+    padding: 25px;
+    border-radius: 15px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+h1 {
+    text-align: center;
+}
+
+.session-box {
+    background: #f7f9fc;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 25px;
+}
+
+input {
+    width: 100%;
+    padding: 12px;
+    margin-top: 8px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+}
+
+button {
+    width: 100%;
+    margin-top: 10px;
+    padding: 12px;
+    background: #0077ff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #005ecc;
+}
+
+/* Chat UI */
+.chat-box {
+    height: 350px;
+    overflow-y: auto;
+    background: #fafafa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+}
+
+.chat-message {
+    padding: 12px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    max-width: 80%;
+}
+
+.user {
+    background: #0077ff;
+    color: white;
+    margin-left: auto;
+}
+
+.ai {
+    background: #ececec;
+    color: #111;
+    margin-right: auto;
+}
+
+.chat-input {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.chat-input input {
+    flex: 1;
+    padding: 15px;
+    font-size: 16px;
+    min-height: 80px;
+    resize: vertical;
+}
+
+.chat-input button {
+    padding: 10px 20px;
+    height: fit-content;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Itinerary */
+.itinerary {
+    background: #f7f9fc;
+    padding: 15px;
+    border-radius: 12px;
+    margin-top: 20px;
+}
+
+.itinerary-title {
+    font-size: 22px;
+    margin-bottom: 10px;
+}
+
+.day-block {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    border-left: 5px solid #0077ff;
+}
+
+.hidden {
+    display: none;
+}

@@ -4,8 +4,7 @@ from typing import List, Optional, Any
 from pydantic import BaseModel, EmailStr
 
 
-# --------- Basic Trip Session ---------
-
+# ----- Session start -----
 class TripSessionStartRequest(BaseModel):
     register_id: str
     email: EmailStr
@@ -15,6 +14,7 @@ class TripSessionStartResponse(BaseModel):
     trip_id: str
 
 
+# ----- Chat message -----
 class TripMessageRequest(BaseModel):
     trip_id: str
     register_id: str
@@ -28,15 +28,13 @@ class TripMessageResponse(BaseModel):
     is_final_itinerary: bool = False
 
 
-# --------- Feedback ---------
-
+# ----- Feedback -----
 class FeedbackCreate(BaseModel):
     rating: int  # 1-5
     comments: Optional[str] = None
 
 
-# --------- For future UI use (optional) ---------
-
+# ----- Itinerary JSON (for UI if you want to use it) -----
 class Activity(BaseModel):
     name: str
     map_url: Optional[str] = None

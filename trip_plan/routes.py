@@ -2,19 +2,20 @@ import uuid
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from auth.app.database import get_db
 from . import models, schemas
 from .ai_planner import SYSTEM_PROMPT, call_openrouter, split_ai_response
+from auth.app.config import settings
+import logging
 
-router = APIRouter(prefix="/trip", tags=["Trip Planning"])
+router = APIRouter(tags=["Trip Planning"])
 
 
-# --------- Start Session ---------
-
-@router.post("/session/start", response_model=schemas.TripSessionStartResponse)
+# -------- Start a new trip session --------
+@router.post("/trip-plan/session/start", response_model=schemas.TripSessionStartResponse)
 def start_session(payload: schemas.TripSessionStartRequest,
                   db: Session = Depends(get_db)):
     trip_id = uuid.uuid4().hex
@@ -31,9 +32,8 @@ def start_session(payload: schemas.TripSessionStartRequest,
     return schemas.TripSessionStartResponse(trip_id=trip_id)
 
 
-# --------- Send Chat Message ---------
-
-@router.post("/session/message", response_model=schemas.TripMessageResponse)
+# -------- Chat message with AI (collect data / generate itinerary) --------
+@router.post("/trip-plan/session/message", response_model=schemas.TripMessageResponse)
 async def trip_message(payload: schemas.TripMessageRequest,
                        db: Session = Depends(get_db)):
     # 1) Load trip
@@ -54,7 +54,7 @@ async def trip_message(payload: schemas.TripMessageRequest,
     db.add(user_msg)
     db.commit()
 
-    # 3) Build conversation context (last few messages)
+    # 3) Load conversation history
     last_msgs: List[models.TripMessage] = (
         db.query(models.TripMessage)
         .filter(models.TripMessage.trip_id == trip.id)
@@ -65,7 +65,7 @@ async def trip_message(payload: schemas.TripMessageRequest,
     history = []
     history.append({"role": "system", "content": SYSTEM_PROMPT})
 
-    # add a concise summary of known trip fields
+    # current context summary
     summary_bits = []
     if trip.from_city:
         summary_bits.append(f"From: {trip.from_city}")
@@ -79,7 +79,7 @@ async def trip_message(payload: schemas.TripMessageRequest,
         summary_bits.append(f"Duration: {trip.duration_days} days")
     if trip.start_date and trip.end_date:
         summary_bits.append(f"Dates: {trip.start_date} to {trip.end_date}")
-    if trip.interests:
+    if trip.interests and isinstance(trip.interests, list):
         summary_bits.append(f"Interests: {', '.join(trip.interests)}")
     if trip.special_requirements:
         summary_bits.append(f"Special: {trip.special_requirements}")
@@ -97,11 +97,20 @@ async def trip_message(payload: schemas.TripMessageRequest,
         })
 
     # 4) Call OpenRouter
-    ai_raw = await call_openrouter(history)
+    if not settings.OPENROUTER_API_KEY:
+        raise HTTPException(status_code=500, detail="OpenRouter API key not configured. Set OPENROUTER_API_KEY in .env")
+
+    try:
+        ai_raw = await call_openrouter(history)
+    except Exception as e:
+        # Log the error server-side and return structured JSON detail so frontend can inspect
+        logging.exception("Error calling OpenRouter")
+        raise HTTPException(status_code=502, detail={"message": "AI service error", "error": str(e)})
     human_text, json_data = split_ai_response(ai_raw)
 
-    # 5) Apply structured updates to Trip, if any
     is_final = False
+
+    # 5) Apply structured updates
     if json_data:
         updated = json_data.get("updated_fields") or {}
         for key, value in updated.items():
@@ -121,7 +130,7 @@ async def trip_message(payload: schemas.TripMessageRequest,
     db.commit()
     db.refresh(trip)
 
-    # 6) Store AI message
+    # 6) Save AI message
     ai_msg = models.TripMessage(
         trip_id=trip.id,
         register_id=payload.register_id,
@@ -141,9 +150,8 @@ async def trip_message(payload: schemas.TripMessageRequest,
     )
 
 
-# --------- Get Trip Detail (optional helper) ---------
-
-@router.get("/{trip_id}", response_model=schemas.TripDetail)
+# -------- Get trip detail (for frontend to show planned trip) --------
+@router.get("/trip-plan/{trip_id}", response_model=schemas.TripDetail)
 def get_trip(trip_id: str, db: Session = Depends(get_db)):
     trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
     if not trip:
@@ -151,9 +159,8 @@ def get_trip(trip_id: str, db: Session = Depends(get_db)):
     return trip
 
 
-# --------- Feedback ---------
-
-@router.post("/{trip_id}/feedback")
+# -------- Feedback --------
+@router.post("/trip-plan/{trip_id}/feedback")
 def create_feedback(trip_id: str,
                     payload: schemas.FeedbackCreate,
                     db: Session = Depends(get_db)):
