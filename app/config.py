@@ -1,0 +1,28 @@
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    # Database
+    DATABASE_URL: str
+
+    # Twilio
+    TWILIO_ACCOUNT_SID: str | None = None
+    TWILIO_AUTH_TOKEN: str | None = None
+    TWILIO_FROM_NUMBER: str | None = None
+
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+    GOOGLE_REDIRECT_URI: str | None = None
+
+    # App Secret
+    APP_SECRET_KEY: str | None = None
+
+    # OpenRouter
+    OPENROUTER_API_KEY: str | None = None
+    OPENROUTER_MODEL: str | None = "openrouter/gpt-4.1-mini"
+
+    class Config:
+        env_file = ".env"
+
+
+settings = Settings()

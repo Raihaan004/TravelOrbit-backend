@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+psycopg2-binary
+python-dotenv
+pydantic
+pydantic-settings
+twilio
+requests
+httpx         # <--- NEW for OpenRouter

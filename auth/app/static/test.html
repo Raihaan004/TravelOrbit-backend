@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Auth Test</title>
+</head>
+<body>
+  <h1>Normal Phone Signup (No Google)</h1>
+  <div>
+    <input id="name" placeholder="Name" />
+    <input id="age" placeholder="Age" type="number" />
+    <input id="location" placeholder="Location" />
+    <input id="phone" placeholder="Phone (+91...)" />
+    <input id="email" placeholder="Email (optional)" />
+    <button onclick="sendPhoneOtp()">Send OTP</button>
+  </div>
+  <div>
+    <input id="otp" placeholder="Enter OTP" />
+    <button onclick="verifyPhoneOtp()">Verify & Register</button>
+  </div>
+  <pre id="result"></pre>
+
+  <hr/>
+  <h1>Google Login Flow (Basic)</h1>
+  <button onclick="openGoogleAuth()">Login with Google</button>
+  <pre id="google-result"></pre>
+
+  <script>
+    const API_BASE = "http://127.0.0.1:8000";
+
+    function log(id, data) {
+      document.getElementById(id).textContent =
+        typeof data === "string" ? data : JSON.stringify(data, null, 2);
+    }
+
+    async function sendPhoneOtp() {
+      const payload = {
+        name: document.getElementById("name").value,
+        age: parseInt(document.getElementById("age").value),
+        location: document.getElementById("location").value,
+        phone: document.getElementById("phone").value,
+        email: document.getElementById("email").value || null,
+      };
+      const res = await fetch(API_BASE + "/auth/phone/signup/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      log("result", data);
+    }
+
+    async function verifyPhoneOtp() {
+      const payload = {
+        phone: document.getElementById("phone").value,
+        code: document.getElementById("otp").value,
+      };
+      const res = await fetch(API_BASE + "/auth/phone/signup/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      log("result", data);
+    }
+
+    async function openGoogleAuth() {
+      const res = await fetch(API_BASE + "/auth/google/url");
+      const data = await res.json();
+      log("google-result", data);
+      window.open(data.auth_url, "_blank");
+    }
+  </script>
+</body>
+</html>
