@@ -8,3 +8,4 @@ pydantic-settings
 twilio
 requests
 httpx         # <--- NEW for OpenRouter
+stripe

@@ -1,4 +1,5 @@
 from datetime import datetime
+import uuid
 
 from sqlalchemy import (
     Column, String, Integer, Date, DateTime,
@@ -53,12 +54,13 @@ class Trip(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relationship
+    # Relationships
     messages = relationship(
         "TripMessage",
         back_populates="trip",
         cascade="all, delete-orphan",
     )
+    payments = relationship("Payment", back_populates="trip")
 
 
 # ---------- CHAT HISTORY ----------
@@ -86,21 +88,22 @@ class TripMessage(Base):
 class Payment(Base):
     __tablename__ = "payments"
 
-    id = Column(String, primary_key=True)  # uuid string
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
     trip_id = Column(String, ForeignKey("trips.id"), index=True, nullable=False)
 
     register_id = Column(String, index=True, nullable=False)
     email = Column(String, index=True, nullable=False)
 
-    provider = Column(String, default="stripe")  # via Clerk Billing
-    clerk_user_id = Column(String, nullable=True)
-    provider_payment_id = Column(String, nullable=True)  # Stripe session/PI id
+    provider = Column(String, default="mock")  # 'mock' payment gateway
+    provider_payment_id = Column(String, nullable=True)  # fake txn id
 
     status = Column(String, default="pending")  # pending, succeeded, failed
-    amount = Column(Numeric, nullable=True)
+    amount = Column(Numeric, nullable=True)  # major units (e.g. 4500.00)
     currency = Column(String, default="INR")
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    trip = relationship("Trip", back_populates="payments")
 
 
 # ---------- FEEDBACK ----------

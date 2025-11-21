@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_MODEL: str = ""
 
+    # SMTP settings
+    SMTP_HOST: str
+    SMTP_PORT: int
+    SMTP_USERNAME: str
+    SMTP_PASSWORD: str
+    SENDER_EMAIL: str
+
     class Config:
         env_file = ".env"
 

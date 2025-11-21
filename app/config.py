@@ -1,7 +1,6 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    # Database
     DATABASE_URL: str
 
     # Twilio
@@ -14,12 +13,19 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str | None = None
     GOOGLE_REDIRECT_URI: str | None = None
 
-    # App Secret
+    # App key
     APP_SECRET_KEY: str | None = None
 
     # OpenRouter
     OPENROUTER_API_KEY: str | None = None
-    OPENROUTER_MODEL: str | None = "openrouter/gpt-4.1-mini"
+    OPENROUTER_MODEL: str | None = None
+
+    # Email (NEW)
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int | None = None
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SENDER_EMAIL: str | None = None
 
     class Config:
         env_file = ".env"
