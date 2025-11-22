@@ -74,3 +74,30 @@ class TripDetail(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ----- Packages -----
+class Package(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    min_price: int
+    max_price: int
+
+
+class PackageListResponse(BaseModel):
+    trip_id: str
+    budget_level: Optional[str]
+    packages: List[Package]
+
+
+class PackageSelectRequest(BaseModel):
+    register_id: str
+    email: EmailStr
+
+
+class PackageSelectResponse(BaseModel):
+    message: str
+    trip_id: str
+    selected_package: Package
+    next_step: Optional[str] = None

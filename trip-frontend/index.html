@@ -32,6 +32,27 @@
     <!-- Itinerary Box -->
     <div id="itinerary" class="itinerary hidden"></div>
 
+    <!-- Package Selection -->
+    <div id="packagesArea" class="hidden"></div>
+
+    <!-- Payment -->
+    <div id="paymentArea" class="hidden"></div>
+
+    <!-- Feedback -->
+    <div id="feedbackArea" class="hidden">
+        <h3>⭐ Rate your trip</h3>
+        <select id="rating">
+            <option value="5">5 ★★★★★</option>
+            <option value="4">4 ★★★★</option>
+            <option value="3">3 ★★★</option>
+            <option value="2">2 ★★</option>
+            <option value="1">1 ★</option>
+        </select>
+        <textarea id="comments" placeholder="Write feedback..."></textarea>
+        <button onclick="sendFeedback()">Submit Feedback</button>
+        <p id="feedbackMsg"></p>
+    </div>
+
 </div>
 
 <script src="script.js"></script>

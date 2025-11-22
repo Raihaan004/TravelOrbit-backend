@@ -10,6 +10,8 @@ from . import models, schemas
 from .ai_planner import SYSTEM_PROMPT, call_openrouter, split_ai_response
 from auth.app.config import settings
 import logging
+from decimal import Decimal
+from typing import Dict, Optional
 
 router = APIRouter(tags=["Trip Planning"])
 
@@ -147,6 +149,120 @@ async def trip_message(payload: schemas.TripMessageRequest,
         trip_id=trip.id,
         ai_message=human_text,
         is_final_itinerary=is_final,
+    )
+
+
+# ----- Package generation + selection -----
+def _estimate_people(trip: models.Trip) -> int:
+    if not trip.party_type:
+        return 1
+    if trip.party_type == "solo":
+        return 1
+    if trip.party_type == "couple":
+        return 2
+    # friends or family
+    total = (trip.adults_count or 0) + (trip.children_count or 0) + (trip.seniors_count or 0)
+    return total if total > 0 else 2
+
+
+def generate_packages(trip: models.Trip, budget_override: Optional[str] = None) -> list[Dict]:
+    budget = (budget_override or trip.budget_level or "moderate").lower()
+    days = trip.duration_days or 1
+    people = _estimate_people(trip)
+
+    base_per_person_per_day = 1500  # keep in sync with mock_payment
+
+    budget_ranges = {
+        "cheap": (0.7, 0.95),
+        "moderate": (1.0, 1.3),
+        "luxury": (1.5, 2.0),
+    }
+
+    min_mult, max_mult = budget_ranges.get(budget, budget_ranges["moderate"])
+
+    package_types = [
+        ("Essential", 0.0),
+        ("Comfort", 0.05),
+        ("Premium", 0.12),
+        ("All-Inclusive", 0.2),
+    ]
+
+    packages = []
+    for name, extra in package_types:
+        # vary multipliers slightly per package
+        p_min = min_mult + extra
+        p_max = max_mult + extra
+
+        min_price = int(Decimal(base_per_person_per_day) * Decimal(people) * Decimal(days) * Decimal(p_min))
+        max_price = int(Decimal(base_per_person_per_day) * Decimal(people) * Decimal(days) * Decimal(p_max))
+
+        packages.append({
+            "id": uuid.uuid4().hex,
+            "name": f"{budget.title()} {name}",
+            "description": f"{name} package for {budget} budget.",
+            "min_price": max(1, min_price),
+            "max_price": max(1, max_price),
+        })
+
+    return packages
+
+
+@router.get("/trip-plan/{trip_id}/packages", response_model=schemas.PackageListResponse)
+def list_packages(trip_id: str, budget: Optional[str] = None, db: Session = Depends(get_db)):
+    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    if not (trip.duration_days and trip.party_type):
+        raise HTTPException(status_code=400, detail="Trip must have duration_days and party_type to generate packages")
+
+    packages = generate_packages(trip, budget_override=budget)
+
+    return schemas.PackageListResponse(trip_id=trip.id, budget_level=budget or trip.budget_level, packages=packages)
+
+
+@router.post("/trip-plan/{trip_id}/packages/{package_id}/select", response_model=schemas.PackageSelectResponse)
+def select_package(trip_id: str, package_id: str, payload: schemas.PackageSelectRequest, db: Session = Depends(get_db)):
+    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    if not (trip.duration_days and trip.party_type):
+        raise HTTPException(status_code=400, detail="Trip must have duration_days and party_type to select a package")
+
+    # regenerate packages with current trip budget
+    packages = generate_packages(trip)
+    selected = None
+    for p in packages:
+        if p["id"] == package_id:
+            selected = p
+            break
+
+    if not selected:
+        raise HTTPException(status_code=404, detail="Package not found")
+
+    # choose a concrete price (median)
+    chosen_price = (selected["min_price"] + selected["max_price"]) // 2
+
+    # store selection in ai_summary_json for now
+    ai_json = trip.ai_summary_json or {}
+    ai_json["selected_package"] = selected
+
+    trip.ai_summary_json = ai_json
+    trip.status = "planned"
+    trip.total_price = chosen_price
+
+    db.add(trip)
+    db.commit()
+    db.refresh(trip)
+
+    next_step = f"/trips/{trip.id}/payment/mock"
+
+    return schemas.PackageSelectResponse(
+        message="Package selected. Proceed to payment.",
+        trip_id=trip.id,
+        selected_package=selected,
+        next_step=next_step,
     )
 
 
