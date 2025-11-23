@@ -8,6 +8,53 @@ from pydantic import BaseModel, EmailStr
 class TripSessionStartRequest(BaseModel):
     register_id: str
     email: EmailStr
+    members_count: Optional[int] = 1
+    # Optional structured passenger list and contact phone to allow direct submission
+    passengers: Optional[List[dict]] = None  # e.g., [{"name":"Alice","age":30,"role":"adult"}]
+    contact_phone: Optional[str] = None
+    # Optional freeform user reply when continuing the conversational flow
+    message: Optional[str] = None
+
+
+# ----- Deal Start Request (simplified, collected via form) -----
+class DealStartRequest(BaseModel):
+    """Request to start a deal booking with passenger and contact details."""
+    register_id: str
+    email: EmailStr
+    passenger_name: Optional[str] = None  # First passenger name
+    passenger_age: Optional[int] = None   # First passenger age
+    contact_phone: Optional[str] = None   # Contact phone for booking
+    from_city: Optional[str] = None       # Departure city
+    passengers: Optional[List[dict]] = None  # All passengers: [{"name": "...", "age": ..., "phone": "..."}]
+    message: Optional[str] = None         # Optional freeform message
+
+
+# ----- Deal Auth Flow Request -----
+class DealAuthFlowRequest(BaseModel):
+    """Authenticated deal booking flow - with built-in auth verification."""
+    deal_id: str
+    # User identification (required for auth)
+    register_id: str
+    email: EmailStr
+    phone: Optional[str] = None  # Phone for auth verification
+    # Passenger details
+    passenger_name: Optional[str] = None
+    passenger_age: Optional[int] = None
+    # Additional travelers
+    companions: Optional[List[dict]] = None  # [{"name": "...", "age": ..., "role": "..."}]
+    # Optional message for chat flow
+    message: Optional[str] = None
+
+
+class DealBookingFlowResponse(BaseModel):
+    """Response for deal booking flow with auth status."""
+    trip_id: str
+    step: str  # auth_required, passenger_details, phone_verification, payment_ready, completed
+    message: str  # AI message to show user
+    auth_verified: bool = False
+    payment_url: Optional[str] = None
+    booking_number: Optional[str] = None
+    requires_action: str  # verify_auth, collect_passenger, collect_phone, proceed_payment
 
 
 class TripSessionStartResponse(BaseModel):
@@ -18,7 +65,7 @@ class TripSessionStartResponse(BaseModel):
 class TripMessageRequest(BaseModel):
     trip_id: str
     register_id: str
-    email: EmailStr
+    email: Optional[str] = None  # Make email optional to handle undefined
     message: str
 
 
@@ -71,6 +118,8 @@ class TripDetail(BaseModel):
     status: str
     ai_summary_text: Optional[str]
     ai_summary_json: Optional[Any]
+    passengers: Optional[Any]
+    contact_phone: Optional[str]
 
     class Config:
         from_attributes = True
@@ -101,3 +150,41 @@ class PackageSelectResponse(BaseModel):
     trip_id: str
     selected_package: Package
     next_step: Optional[str] = None
+
+
+# ----- Deal of the Day -----
+class DealOfDayBase(BaseModel):
+    destination: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    original_price: float
+    discounted_price: float
+    currency: str = "INR"
+    image_url: Optional[str] = None
+    # Package fields
+    min_persons: Optional[int] = None
+    max_persons: Optional[int] = None
+    duration_days: Optional[int] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    inclusions: Optional[list] = None
+    itinerary: Optional[Any] = None
+    is_international: Optional[bool] = False
+
+
+class DealOfDayResponse(DealOfDayBase):
+    id: str
+    discount_percentage: Optional[float] = None
+    price_per_person: Optional[float] = None
+    generated_date: date
+    ai_generated: Optional[str] = None
+    title: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class DealOfDayListResponse(BaseModel):
+    deals: List[DealOfDayResponse]
+    count: int
+    message: str

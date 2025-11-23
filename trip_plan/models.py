@@ -45,6 +45,12 @@ class Trip(Base):
     title = Column(String, nullable=True)
     ai_summary_text = Column(Text, nullable=True)
     ai_summary_json = Column(JSONB, nullable=True)
+    # Passenger details and contact
+    passengers = Column(JSONB, nullable=True)  # list of passenger objects: {name, age, role}
+    contact_phone = Column(String, nullable=True)
+
+    # Deal booking flag
+    is_deal_booking = Column(Integer, default=0)  # 1 = from deal, 0 = regular planning
 
     # Calendar sync
     google_calendar_event_id = Column(String, nullable=True)
@@ -119,6 +125,29 @@ class Feedback(Base):
     rating = Column(Integer, nullable=False)  # 1–5
     comments = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+# ---------- DEAL OF THE DAY ----------
+class DealOfDay(Base):
+    __tablename__ = "deals_of_day"
 
-google_calendar_event_id = Column(String, nullable=True)
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    destination = Column(String, nullable=False)  # e.g., "Maldives"
+    description = Column(Text, nullable=True)  # Brief description of the destination
+    original_price = Column(Numeric, nullable=False)  # e.g., 13000
+    discounted_price = Column(Numeric, nullable=False)  # e.g., 10000
+    currency = Column(String, default="INR")  # Currency of prices
+    ai_generated = Column(String, nullable=True)  # AI model used to generate
+    generated_date = Column(Date, nullable=False, default=datetime.utcnow)  # Date deal was generated
+    is_active = Column(Integer, default=1)  # 1 = active, 0 = inactive
+    image_url = Column(String, nullable=True)  # URL to destination image
+    title = Column(String, nullable=True)  # short marketing title for the deal
+    # Package details
+    min_persons = Column(Integer, nullable=True, default=2)
+    max_persons = Column(Integer, nullable=True)
+    duration_days = Column(Integer, nullable=True)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    inclusions = Column(JSONB, nullable=True)
+    itinerary_json = Column(JSONB, nullable=True)
+    is_international = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

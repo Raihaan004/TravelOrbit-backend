@@ -86,15 +86,17 @@ button:hover {
     flex: 1;
     padding: 15px;
     font-size: 16px;
-    min-height: 80px;
+    min-height: 120px;
     resize: vertical;
 }
 
 .chat-input button {
-    padding: 10px 20px;
+    padding: 8px 12px;
     height: fit-content;
     white-space: nowrap;
     flex-shrink: 0;
+    font-size: 14px;
+    width: auto;
 }
 
 /* Itinerary */
@@ -120,4 +122,444 @@ button:hover {
 
 .hidden {
     display: none;
+}
+
+
+/* Deals of the Day */
+.deals-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+    border-radius: 15px;
+    margin-bottom: 25px;
+    color: white;
+}
+
+.deals-section h2 {
+    color: white;
+    margin-top: 0;
+    text-align: center;
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+
+.deals-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.deal-card {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    color: #333;
+}
+
+.deal-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.deal-destination {
+    font-size: 18px;
+    font-weight: bold;
+    color: #667eea;
+    margin-bottom: 8px;
+}
+
+.deal-description {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 12px;
+    min-height: 30px;
+}
+
+.deal-dates {
+    font-size: 12px;
+    color: #667eea;
+    font-weight: 600;
+    margin-bottom: 10px;
+    background: #f0f4ff;
+    padding: 6px 10px;
+    border-radius: 5px;
+    display: inline-block;
+}
+
+.deal-per-person {
+    font-size: 14px;
+    color: #667eea;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.deal-image {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.deal-pricing {
+    margin-bottom: 12px;
+}
+
+.deal-original-price {
+    font-size: 14px;
+    color: #999;
+    text-decoration: line-through;
+    margin-bottom: 5px;
+}
+
+.deal-discounted-price {
+    font-size: 22px;
+    font-weight: bold;
+    color: #e74c3c;
+}
+
+.deal-discount-badge {
+    display: inline-block;
+    background: #e74c3c;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: bold;
+    margin-left: 8px;
+}
+
+.deal-details-btn {
+    width: 100%;
+    padding: 10px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s ease;
+}
+
+.deal-details-btn:hover {
+    background: #764ba2;
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background-color: white;
+    margin: 10% auto;
+    padding: 0;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    animation: slideDown 0.3s ease;
+    max-width: 600px;
+    position: relative;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.deal-details-modal {
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.auth-modal {
+    max-width: 450px;
+}
+
+.close-modal {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.close-modal:hover {
+    color: #000;
+}
+
+.modal-content h2 {
+    margin: 0;
+    padding: 20px 20px 10px 20px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+    max-height: 60vh;
+}
+
+.deal-details-modal .modal-body {
+    max-height: calc(80vh - 180px);
+}
+
+.modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #f0f0f0;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    background: #fafafa;
+    border-radius: 0 0 12px 12px;
+}
+
+.btn-primary {
+    background: #0077ff;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s ease;
+    flex: 1;
+}
+
+.btn-primary:hover {
+    background: #005ecc;
+}
+
+.btn-cancel {
+    background: #f0f0f0;
+    color: #333;
+    border: 1px solid #ddd;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.3s ease;
+}
+
+.btn-cancel:hover {
+    background: #e0e0e0;
+}
+
+/* Deal Info Styles */
+.deal-info {
+    background: #fafafa;
+    padding: 15px;
+    border-radius: 10px;
+}
+
+.deal-info p {
+    margin: 10px 0;
+    line-height: 1.6;
+}
+
+.pricing-details {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 15px 0;
+    border-left: 4px solid #667eea;
+}
+
+.pricing-details p {
+    margin: 8px 0;
+}
+
+.discount-info {
+    color: #e74c3c;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+.itinerary-details {
+    background: white;
+    padding: 10px;
+    border-radius: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.detail-day {
+    margin-bottom: 15px;
+    padding: 10px;
+    border-left: 3px solid #667eea;
+    background: #f9f9f9;
+    border-radius: 5px;
+}
+
+.detail-day strong {
+    display: block;
+    margin-bottom: 8px;
+    color: #667eea;
+}
+
+.detail-day ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.detail-day li {
+    margin: 5px 0;
+    color: #555;
+}
+
+/* Auth Form Styles */
+.form-group {
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #333;
+    font-size: 14px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    box-sizing: border-box;
+    transition: border-color 0.3s ease;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #0077ff;
+    box-shadow: 0 0 0 3px rgba(0, 119, 255, 0.1);
+}
+
+/* Feedback Styles */
+#feedbackArea {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    padding: 20px;
+    border-radius: 10px;
+    margin-top: 20px;
+    border: 2px solid #667eea;
+}
+
+#feedbackArea h3 {
+    color: #667eea;
+    margin-top: 0;
+    text-align: center;
+    font-size: 20px;
+}
+
+#feedbackArea select,
+#feedbackArea textarea {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    box-sizing: border-box;
+    transition: border-color 0.3s ease;
+}
+
+#feedbackArea select:focus,
+#feedbackArea textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+#feedbackArea textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+#feedbackArea button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 10px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+    transition: background 0.3s ease;
+}
+
+#feedbackArea button:hover {
+    background: #764ba2;
+}
+
+#feedbackMsg {
+    text-align: center;
+    color: #2e7d32;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+/* Payment Area Styles */
+#paymentArea {
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    padding: 20px;
+    border-radius: 10px;
+    margin-top: 20px;
+    border: 2px solid #667eea;
+}
+
+#paymentArea h2 {
+    color: #667eea;
+    margin-top: 0;
+    text-align: center;
+    font-size: 22px;
+    margin-bottom: 20px;
+}
+
+#paymentArea button {
+    width: 100%;
+    padding: 15px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+    transition: transform 0.2s ease;
+}
+
+#paymentArea button:hover {
+    transform: scale(1.02);
+}
+
+#paymentMsg {
+    margin-top: 15px;
 }

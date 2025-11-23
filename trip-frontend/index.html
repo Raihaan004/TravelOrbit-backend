@@ -12,13 +12,28 @@
     <h1>🌍 TravelOrbit Trip Planner</h1>
 
     <!-- Session Setup -->
+    <!-- Deals of the Day -->
+    <div id="dealsSection" class="deals-section">
+        <h2>🎉 Deal of the Day</h2>
+        <div id="dealsContainer" class="deals-container"></div>
+    </div>
+
+    <!-- Session Setup -->
     <div class="session-box">
         <h2>Start Trip Session</h2>
         <input id="registerId" placeholder="Register ID (ex: user123)">
         <input id="email" placeholder="Email (ex: test@example.com)">
+        <input id="phoneNumber" placeholder="Phone Number (ex: +919876543210)">
         <button onclick="startSession()">Start Session</button>
 
         <p id="sessionStatus"></p>
+        
+        <!-- Test Payment Button -->
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+        <div style="background: #fff3cd; padding: 10px; border-radius: 6px; margin-top: 10px;">
+            <p style="margin: 5px 0; font-size: 12px; color: #856404;"><strong>Test Mode:</strong> Skip to Feedback</p>
+            <button onclick="testPaymentFlow()" style="background: #ffc107; color: #333; margin-top: 10px; font-weight: bold;">Test Payment & Feedback</button>
+        </div>
     </div>
 
     <!-- Chat Box -->

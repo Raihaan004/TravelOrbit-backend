@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str
     TWILIO_AUTH_TOKEN: str
     TWILIO_FROM_NUMBER: str
+    TWILIO_WHATSAPP_NUMBER: str
 
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
@@ -17,6 +18,10 @@ class Settings(BaseSettings):
     # OpenRouter (optional - use uppercase env names for consistency)
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_MODEL: str = ""
+
+    # Image provider keys (optional)
+    PEXELS_API_KEY: str | None = None
+    UNSPLASH_ACCESS_KEY: str | None = None
 
     # SMTP settings
     SMTP_HOST: str

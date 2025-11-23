@@ -29,6 +29,8 @@ Required trip fields:
 - interests: subset of [adventure, sightseeing, cultural, food, nightlife, relaxation]
 - special_requirements
 - start_date and end_date
+ - Ask explicitly for number of members traveling (adults_count, children_count, seniors_count)
+   when the information is missing — do not assume values.
 
 When you reply, ALWAYS output in two sections:
 
@@ -85,7 +87,12 @@ Rules:
 - Always include updated_fields with only the fields that changed this turn.
 - When ready with full plan, set is_final_itinerary = true and include itinerary.
 - Do NOT put any extra text after the JSON.
+Note: When beginning from a pre-made deal/package, always confirm how many people are traveling
+and their composition (adults/children/seniors). After the user confirms members, produce a
+concise plan summary (title, total price estimate, duration, inclusions) followed by the full
+day-by-day itinerary. After the user explicitly confirms the plan, set `is_final_itinerary` true.
 """
+
 
 
 async def call_openrouter(messages: List[Dict]) -> str:
@@ -142,23 +149,43 @@ async def call_openrouter(messages: List[Dict]) -> str:
     print(f"DEBUG: Sending to OpenRouter - Model: {OPENROUTER_MODEL}, Messages: {len(filtered_messages)}")
 
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, headers=headers, json=payload)
+      resp = await client.post(url, headers=headers, json=payload)
+      try:
+        resp.raise_for_status()
+      except httpx.HTTPStatusError:
+        # Log response body for debugging
         try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError:
-            # Log response body for debugging
-            try:
-                resp_body = resp.json()
-            except Exception:
-                resp_body = resp.text
+          resp_body = resp.json()
+        except Exception:
+          resp_body = resp.text
 
-            err_msg = f"OpenRouter API Error ({resp.status_code}): {resp_body}"
-            print(err_msg)
-            # Raise a RuntimeError so callers can handle and convert to an HTTPException
-            raise RuntimeError(err_msg)
-        
-        data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        err_msg = f"OpenRouter API Error ({resp.status_code}): {resp_body}"
+        print(err_msg)
+
+        # If it's a payment/credits error (402), try a lighter retry with fewer tokens
+        if getattr(resp, "status_code", None) == 402:
+          try:
+            retry_payload = dict(payload)
+            retry_payload["max_tokens"] = 600
+            resp2 = await client.post(url, headers=headers, json=retry_payload)
+            resp2.raise_for_status()
+            data2 = resp2.json()
+            return data2["choices"][0]["message"]["content"]
+          except Exception:
+            # fallback to a deterministic assistant message so the app can continue
+            fallback_human = (
+              "I can't reach the AI service right now due to account credits or token limits. "
+              "Meanwhile, please provide any missing trip details: number of members, names and ages of travellers, contact phone, "
+              "budget level, duration, interests and preferred start date."
+            )
+            fallback_json = {"is_final_itinerary": False, "updated_fields": {}}
+            return fallback_human + "\n---JSON---\n" + json.dumps(fallback_json)
+
+        # Non-retryable error: raise a RuntimeError so callers can handle
+        raise RuntimeError(err_msg)
+
+      data = resp.json()
+      return data["choices"][0]["message"]["content"]
 def split_ai_response(content: str) -> Tuple[str, Optional[dict]]:
     """
     Split model output into human_text and JSON dict.
@@ -167,12 +194,50 @@ def split_ai_response(content: str) -> Tuple[str, Optional[dict]]:
         ---JSON---
         { ... }
     """
+    def _strip_code_fence(s: str) -> str:
+      s = s.strip()
+      # Remove ```json ... ``` or ``` ... ``` fences
+      if s.startswith("```") and s.endswith("```"):
+        # drop fences and optional language marker
+        inner = s[3:-3].lstrip('\n')
+        # if language specified (e.g., ```json), remove first token
+        if '\n' in inner:
+          return inner.split('\n', 1)[1].strip()
+        return inner.strip()
+      return s
+
+    def _extract_balanced_json(s: str) -> Optional[dict]:
+      # Find first '{' then find matching closing '}' via brace counting
+      if not s or '{' not in s:
+        return None
+      start = s.find('{')
+      depth = 0
+      for i in range(start, len(s)):
+        ch = s[i]
+        if ch == '{':
+          depth += 1
+        elif ch == '}':
+          depth -= 1
+          if depth == 0:
+            candidate = s[start:i+1]
+            try:
+              return json.loads(candidate)
+            except Exception:
+              return None
+      return None
+
     parts = content.split("---JSON---", 1)
     human_text = parts[0].strip()
     json_data = None
+
     if len(parts) > 1:
-        try:
-            json_data = json.loads(parts[1].strip())
-        except json.JSONDecodeError:
-            json_data = None
+      tail = _strip_code_fence(parts[1])
+      json_data = _extract_balanced_json(tail)
+
+    # If no JSON after marker, try to find a JSON object in the whole content
+    if json_data is None:
+      # Try stripping any code fences first
+      stripped = _strip_code_fence(content)
+      json_data = _extract_balanced_json(stripped)
+
     return human_text, json_data

@@ -43,6 +43,10 @@ async def trip_message(payload: schemas.TripMessageRequest,
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
 
+    # Validate and set email
+    if not payload.email:
+        payload.email = trip.email or "user@example.com"
+
     # 2) Save user message
     user_msg = models.TripMessage(
         trip_id=trip.id,
@@ -56,7 +60,27 @@ async def trip_message(payload: schemas.TripMessageRequest,
     db.add(user_msg)
     db.commit()
 
-    # 3) Load conversation history
+    # 3) If this is a deal booking and already planned, don't call AI
+    if trip.is_deal_booking and trip.status == "planned":
+        # Just acknowledge and don't call AI
+        ai_message_text = "Thank you! Your booking is confirmed. Proceed to payment whenever you're ready."
+        ai_msg = models.TripMessage(
+            trip_id=trip.id,
+            register_id=payload.register_id,
+            email=payload.email,
+            sender_role="ai",
+            message_type="ai",
+            content=ai_message_text,
+        )
+        db.add(ai_msg)
+        db.commit()
+        return schemas.TripMessageResponse(
+            trip_id=trip.id,
+            ai_message=ai_message_text,
+            is_final_itinerary=True,
+        )
+
+    # 4) Load conversation history
     last_msgs: List[models.TripMessage] = (
         db.query(models.TripMessage)
         .filter(models.TripMessage.trip_id == trip.id)
@@ -98,17 +122,79 @@ async def trip_message(payload: schemas.TripMessageRequest,
             "content": m.content,
         })
 
-    # 4) Call OpenRouter
+    # 5) Call OpenRouter
     if not settings.OPENROUTER_API_KEY:
-        raise HTTPException(status_code=500, detail="OpenRouter API key not configured. Set OPENROUTER_API_KEY in .env")
+        # Fallback AI response if no OpenRouter configured
+        fallback_message = """I'm helping you plan your trip! To get started, please tell me:
+
+1. **Where are you traveling from?** (e.g., New York, London, etc.)
+2. **Where do you want to go?** (destination city/country)
+3. **How many people are traveling?** (solo, couple, family, etc.)
+4. **How long is your trip?** (number of days)
+5. **What's your budget?** (cheap, moderate, luxury)
+6. **What interests you?** (adventure, sightseeing, cultural, food, nightlife, relaxation)
+
+Once you share these details, I'll create a personalized day-by-day itinerary for you! ✈️"""
+        
+        ai_msg = models.TripMessage(
+            trip_id=trip.id,
+            register_id=payload.register_id,
+            email=payload.email,
+            sender_role="ai",
+            message_type="ai",
+            content=fallback_message,
+            created_at=datetime.utcnow(),
+        )
+        db.add(ai_msg)
+        db.commit()
+        return schemas.TripMessageResponse(
+            trip_id=trip.id,
+            ai_message=fallback_message,
+            is_final_itinerary=False,
+        )
 
     try:
         ai_raw = await call_openrouter(history)
     except Exception as e:
         # Log the error server-side and return structured JSON detail so frontend can inspect
         logging.exception("Error calling OpenRouter")
-        raise HTTPException(status_code=502, detail={"message": "AI service error", "error": str(e)})
+        fallback_message = f"""I encountered an issue reaching the AI planning service. Could you please share:
+- Your destination
+- Trip duration (days)
+- Budget level (cheap/moderate/luxury)
+- Number of travelers
+- Your interests (adventure, food, culture, etc.)
+
+I'll help you plan your trip once these details are confirmed!"""
+        
+        ai_msg = models.TripMessage(
+            trip_id=trip.id,
+            register_id=payload.register_id,
+            email=payload.email,
+            sender_role="ai",
+            message_type="ai",
+            content=fallback_message,
+            created_at=datetime.utcnow(),
+        )
+        db.add(ai_msg)
+        db.commit()
+        return schemas.TripMessageResponse(
+            trip_id=trip.id,
+            ai_message=fallback_message,
+            is_final_itinerary=False,
+        )
+    
     human_text, json_data = split_ai_response(ai_raw)
+
+    # If parsing failed or no human text, provide fallback
+    if not human_text or human_text.strip() == "":
+        human_text = """Let me help you plan your trip step by step! Please share:
+- Your destination and departure city
+- Trip duration and preferred dates
+- Number and type of travelers
+- Budget level and interests
+
+I'll create a personalized itinerary for you!"""
 
     is_final = False
 

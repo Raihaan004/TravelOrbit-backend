@@ -5,6 +5,7 @@ psycopg2-binary
 python-dotenv
 pydantic
 pydantic-settings
+pydantic[email]
 twilio
 requests
 httpx         # <--- NEW for OpenRouter
