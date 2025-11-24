@@ -1,8 +1,6 @@
 import uuid
 from decimal import Decimal
-
-from trip_plan.models import Trip, Payment
-
+from trip_plan.models import Trip
 
 def calculate_price_for_trip(trip: Trip) -> tuple[Decimal, str]:
     """
@@ -51,26 +49,3 @@ def calculate_price_for_trip(trip: Trip) -> tuple[Decimal, str]:
 def generate_booking_number() -> str:
     """Simple booking reference like TRIP-2025-XXXX."""
     return "TRIP-" + uuid.uuid4().hex[:8].upper()
-
-
-# DEPRECATED: Use app.email_service.EmailService instead
-# Legacy functions kept for backwards compatibility only
-def build_invoice_html(trip: Trip, payment: Payment, booking_number: str) -> str:
-    """DEPRECATED: Use EmailService.build_complete_email_html() instead"""
-    from app.email_service import EmailService
-    return EmailService._build_invoice_html(trip, payment, booking_number)
-
-
-def build_ticket_html(trip: Trip, booking_number: str) -> str:
-    """DEPRECATED: Use EmailService.build_complete_email_html() instead"""
-    from app.email_service import EmailService
-    trip_summary = EmailService._build_trip_summary_html(trip, None, booking_number)
-    itinerary = EmailService._build_daily_itinerary_html(trip)
-    return f"{trip_summary}{itinerary}"
-
-
-def send_email_with_invoice_and_ticket(to_email: str, subject: str, html_body: str):
-    """DEPRECATED: Use EmailService.send_email() instead"""
-    from app.email_service import EmailService
-    EmailService.send_email(to_email, subject, html_body)
-

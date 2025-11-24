@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TravelOrbit - Login / Signup</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+        }
+        .auth-container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .btn:active {
+            transform: scale(0.98);
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-google {
+            background: #db4437;
+            color: white;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #667eea;
+            color: #667eea;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        .hidden {
+            display: none;
+        }
+        .link {
+            color: #667eea;
+            cursor: pointer;
+            text-decoration: underline;
+            font-size: 14px;
+        }
+        .error {
+            color: red;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="auth-container" id="mainMenu">
+    <h2>Welcome to TravelOrbit</h2>
+    <button class="btn btn-primary" onclick="showLogin()">Login</button>
+    <button class="btn btn-outline" onclick="showSignup()">Sign Up</button>
+    <div style="margin: 15px 0; color: #aaa;">OR</div>
+    <button class="btn btn-google" onclick="startGoogleAuth()">Continue with Google</button>
+</div>
+
+<!-- LOGIN FORM -->
+<div class="auth-container hidden" id="loginForm">
+    <h2>Login</h2>
+    <div id="loginStep1">
+        <input type="email" id="loginEmail" placeholder="Enter your email">
+        <button class="btn btn-primary" onclick="sendLoginOtp()">Send OTP</button>
+    </div>
+    <div id="loginStep2" class="hidden">
+        <p>OTP sent to your email!</p>
+        <input type="text" id="loginOtp" placeholder="Enter OTP">
+        <button class="btn btn-primary" onclick="verifyLoginOtp()">Verify & Login</button>
+    </div>
+    <p class="error" id="loginError"></p>
+    <p class="link" onclick="showMain()">Back</p>
+</div>
+
+<!-- SIGNUP FORM -->
+<div class="auth-container hidden" id="signupForm">
+    <h2>Sign Up</h2>
+    <div id="signupStep1">
+        <input type="text" id="signupName" placeholder="Full Name">
+        <input type="email" id="signupEmail" placeholder="Email (Optional)">
+        <input type="tel" id="signupPhone" placeholder="Phone Number (e.g. +91...)">
+        <input type="number" id="signupAge" placeholder="Age">
+        <input type="text" id="signupLocation" placeholder="City/Location">
+        <button class="btn btn-primary" onclick="sendSignupOtp()">Send OTP</button>
+    </div>
+    <div id="signupStep2" class="hidden">
+        <p>OTP sent to your phone!</p>
+        <input type="text" id="signupOtp" placeholder="Enter OTP">
+        <button class="btn btn-primary" onclick="verifySignupOtp()">Verify & Register</button>
+    </div>
+    <p class="error" id="signupError"></p>
+    <p class="link" onclick="showMain()">Back</p>
+</div>
+
+<!-- GOOGLE PHONE VERIFICATION -->
+<div class="auth-container hidden" id="googlePhoneForm">
+    <h2>Complete Registration</h2>
+    <p>We need your phone number to complete the process.</p>
+    <div id="googleStep1">
+        <input type="tel" id="googlePhone" placeholder="Phone Number">
+        <button class="btn btn-primary" onclick="sendGooglePhoneOtp()">Send OTP</button>
+    </div>
+    <div id="googleStep2" class="hidden">
+        <input type="text" id="googleOtp" placeholder="Enter OTP">
+        <button class="btn btn-primary" onclick="verifyGooglePhoneOtp()">Verify</button>
+    </div>
+    <p class="error" id="googleError"></p>
+</div>
+
+<script>
+    const BASE_URL = "http://127.0.0.1:8000";
+    let googleTempId = null;
+
+    function showMain() {
+        hideAll();
+        document.getElementById("mainMenu").classList.remove("hidden");
+    }
+
+    function showLogin() {
+        hideAll();
+        document.getElementById("loginForm").classList.remove("hidden");
+        document.getElementById("loginStep1").classList.remove("hidden");
+        document.getElementById("loginStep2").classList.add("hidden");
+        document.getElementById("loginError").innerText = "";
+    }
+
+    function showSignup() {
+        hideAll();
+        document.getElementById("signupForm").classList.remove("hidden");
+        document.getElementById("signupStep1").classList.remove("hidden");
+        document.getElementById("signupStep2").classList.add("hidden");
+        document.getElementById("signupError").innerText = "";
+    }
+
+    function hideAll() {
+        document.querySelectorAll(".auth-container").forEach(el => el.classList.add("hidden"));
+    }
+
+    // --- LOGIN FLOW ---
+    async function sendLoginOtp() {
+        const email = document.getElementById("loginEmail").value;
+        if (!email) return showError("loginError", "Please enter email");
+
+        try {
+            const res = await fetch(`${BASE_URL}/auth/email/login/send-otp`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email })
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+            
+            document.getElementById("loginStep1").classList.add("hidden");
+            document.getElementById("loginStep2").classList.remove("hidden");
+        } catch (e) {
+            showError("loginError", e.message);
+        }
+    }
+
+    async function verifyLoginOtp() {
+        const email = document.getElementById("loginEmail").value;
+        const code = document.getElementById("loginOtp").value;
+
+        try {
+            const res = await fetch(`${BASE_URL}/auth/email/login/verify`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, code })
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+            
+            const data = await res.json();
+            loginSuccess(data);
+        } catch (e) {
+            showError("loginError", e.message);
+        }
+    }
+
+    // --- SIGNUP FLOW ---
+    async function sendSignupOtp() {
+        const name = document.getElementById("signupName").value;
+        const phone = document.getElementById("signupPhone").value;
+        const email = document.getElementById("signupEmail").value; // Optional
+        const age = document.getElementById("signupAge").value;
+        const location = document.getElementById("signupLocation").value;
+
+        if (!name || !phone) return showError("signupError", "Name and Phone are required");
+
+        try {
+            const res = await fetch(`${BASE_URL}/auth/phone/signup/send-otp`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, phone, email: email || null, age: parseInt(age) || null, location })
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+
+            document.getElementById("signupStep1").classList.add("hidden");
+            document.getElementById("signupStep2").classList.remove("hidden");
+        } catch (e) {
+            showError("signupError", e.message);
+        }
+    }
+
+    async function verifySignupOtp() {
+        const phone = document.getElementById("signupPhone").value;
+        const code = document.getElementById("signupOtp").value;
+
+        try {
+            const res = await fetch(`${BASE_URL}/auth/phone/signup/verify`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ phone, code })
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+
+            const data = await res.json();
+            loginSuccess(data);
+        } catch (e) {
+            showError("signupError", e.message);
+        }
+    }
+
+    // --- GOOGLE FLOW ---
+    async function startGoogleAuth() {
+        try {
+            const res = await fetch(`${BASE_URL}/auth/google/url`);
+            const data = await res.json();
+            // Redirect to Google
+            window.location.href = data.auth_url;
+        } catch (e) {
+            alert("Failed to start Google Auth");
+        }
+    }
+
+    // Check for Google Callback code in URL
+    window.onload = async function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        
+        if (code) {
+            // We are back from Google
+            try {
+                const res = await fetch(`${BASE_URL}/auth/google/callback?code=${code}`);
+                const data = await res.json();
+                
+                if (data.status === "login_success") {
+                    loginSuccess(data.user);
+                } else if (data.status === "needs_phone_verification") {
+                    // Show phone verification UI
+                    hideAll();
+                    document.getElementById("googlePhoneForm").classList.remove("hidden");
+                    googleTempId = data.google_temp_id;
+                } else {
+                    alert("Unknown Google Auth status");
+                    showMain();
+                }
+            } catch (e) {
+                alert("Google Auth Failed: " + e.message);
+                showMain();
+            }
+            // Clean URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    };
+
+    async function sendGooglePhoneOtp() {
+        const phone = document.getElementById("googlePhone").value;
+        if (!phone) return showError("googleError", "Enter phone number");
+
+        try {
+            const res = await fetch(`${BASE_URL}/auth/google/phone/send-otp`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ google_temp_id: googleTempId, phone })
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+
+            document.getElementById("googleStep1").classList.add("hidden");
+            document.getElementById("googleStep2").classList.remove("hidden");
+        } catch (e) {
+            showError("googleError", e.message);
+        }
+    }
+
+    async function verifyGooglePhoneOtp() {
+        const code = document.getElementById("googleOtp").value;
+
+        try {
+            const res = await fetch(`${BASE_URL}/auth/google/phone/verify`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ google_temp_id: googleTempId, code })
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || "Failed");
+
+            const data = await res.json();
+            loginSuccess(data);
+        } catch (e) {
+            showError("googleError", e.message);
+        }
+    }
+
+    function loginSuccess(user) {
+        // Save user to localStorage
+        localStorage.setItem("user", JSON.stringify(user));
+        // Redirect to main app
+        window.location.href = "index.html";
+    }
+
+    function showError(id, msg) {
+        document.getElementById(id).innerText = msg;
+    }
+</script>
+
+</body>
+</html>

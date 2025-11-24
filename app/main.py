@@ -6,7 +6,7 @@ from app.routes.webhook_routes import router as webhook_router
 from app.whatsapp_routes import router as whatsapp_router
 from app.whatsapp_service import WHATSAPP_ENABLED
 from trip_plan.routes import router as trip_plan_router
-from trip_plan.payment_mock_routes import router as mock_payment_router  # NEW
+from trip_plan.payment_routes import router as payment_router  # NEW
 from trip_plan.deal_routes import router as deal_router
 
 app = FastAPI(title="TravelOrbit Backend")
@@ -24,7 +24,7 @@ app.include_router(whatsapp_router)
 app.include_router(deal_router)          # /deals endpoints (shown before auth)
 app.include_router(webhook_router, prefix="/webhooks")
 app.include_router(trip_plan_router)       # /trip-plan/...
-app.include_router(mock_payment_router)    # /trips/{trip_id}/payment/mock
+app.include_router(payment_router)    # /trips/{trip_id}/payment/...
 
 @app.get("/")
 def root():

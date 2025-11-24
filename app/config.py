@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     SENDER_EMAIL: str | None = None
 
+    # Razorpay
+    RAZORPAY_KEY_ID: str | None = None
+    RAZORPAY_KEY_SECRET: str | None = None
+
     class Config:
         env_file = ".env"
 

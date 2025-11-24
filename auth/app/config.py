@@ -30,7 +30,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str
     SENDER_EMAIL: str
 
+    # Razorpay
+    RAZORPAY_KEY_ID: str | None = None
+    RAZORPAY_KEY_SECRET: str | None = None
+
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()

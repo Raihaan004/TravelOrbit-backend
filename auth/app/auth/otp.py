@@ -5,6 +5,9 @@ from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 from ..config import settings
 from ..models import OtpCode
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 def get_twilio_client():
     """Initialize Twilio client on-demand instead of at module import time"""
@@ -28,6 +31,31 @@ def send_otp_sms(phone: str, code: str):
     except Exception as e:
         print(f"Error sending OTP SMS: {str(e)}")
         raise Exception(f"SMS sending failed: {str(e)}")
+
+def send_otp_email(to_email: str, code: str):
+    try:
+        if not settings.SMTP_HOST or not settings.SMTP_USERNAME:
+            print("SMTP not configured, skipping email")
+            return
+
+        msg = MIMEMultipart()
+        msg['From'] = settings.SENDER_EMAIL
+        msg['To'] = to_email
+        msg['Subject'] = "Your Login Verification Code"
+
+        body = f"Your verification code is: {code}\n\nThis code will expire in 5 minutes."
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT)
+        server.starttls()
+        server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+        text = msg.as_string()
+        server.sendmail(settings.SENDER_EMAIL, to_email, text)
+        server.quit()
+        print(f"Email OTP sent to {to_email}")
+    except Exception as e:
+        print(f"Error sending email OTP: {str(e)}")
+        raise Exception(f"Email sending failed: {str(e)}")
 
 def create_and_send_phone_otp_for_signup(db: Session, signup_data) -> None:
     print(f"[create_and_send_phone_otp_for_signup] Starting for phone: {signup_data.phone}")
@@ -82,3 +110,26 @@ def create_and_send_google_phone_otp(db: Session, google_temp_id: str, phone: st
 
     send_otp_sms(phone, code)
     return otp_row2.id  # we can use this as another temp id
+
+def create_and_send_email_otp_for_login(db: Session, email: str) -> None:
+    code = generate_otp()
+    
+    # Invalidate old OTPs
+    old_otps = db.query(OtpCode).filter(
+        OtpCode.email == email,
+        OtpCode.purpose == "email_login",
+        OtpCode.verified == False
+    ).all()
+    for o in old_otps:
+        db.delete(o)
+    
+    otp = OtpCode(
+        email=email,
+        code=code,
+        purpose="email_login",
+        expires_at=OtpCode.default_expiry(),
+    )
+    db.add(otp)
+    db.commit()
+    
+    send_otp_email(email, code)

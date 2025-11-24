@@ -32,6 +32,15 @@ class GooglePhoneVerifyRequest(BaseModel):
     google_temp_id: str
     code: str
 
+# ====== EMAIL LOGIN ======
+
+class EmailLoginRequest(BaseModel):
+    email: EmailStr
+
+class EmailOtpVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str
+
 # ====== BASIC WEBHOOK / TEST ======
 
 class SimpleMessage(BaseModel):

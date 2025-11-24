@@ -18,31 +18,19 @@
         <div id="dealsContainer" class="deals-container"></div>
     </div>
 
-    <!-- Session Setup -->
-    <div class="session-box">
-        <h2>Start Trip Session</h2>
-        <input id="registerId" placeholder="Register ID (ex: user123)">
-        <input id="email" placeholder="Email (ex: test@example.com)">
-        <input id="phoneNumber" placeholder="Phone Number (ex: +919876543210)">
-        <button onclick="startSession()">Start Session</button>
-
-        <p id="sessionStatus"></p>
-        
-        <!-- Test Payment Button -->
-        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
-        <div style="background: #fff3cd; padding: 10px; border-radius: 6px; margin-top: 10px;">
-            <p style="margin: 5px 0; font-size: 12px; color: #856404;"><strong>Test Mode:</strong> Skip to Feedback</p>
-            <button onclick="testPaymentFlow()" style="background: #ffc107; color: #333; margin-top: 10px; font-weight: bold;">Test Payment & Feedback</button>
-        </div>
-    </div>
-
     <!-- Chat Box -->
     <div class="chat-box" id="chatBox"></div>
 
     <div class="chat-input">
         <input id="userMessage" placeholder="Type your message..." />
-        <button onclick="sendMessage()">Send</button>
+        <button onclick="handleUserAction()">Send</button>
     </div>
+
+    <!-- Hidden Inputs for Session State -->
+    <input type="hidden" id="registerId">
+    <input type="hidden" id="email">
+    <input type="hidden" id="phoneNumber">
+    <p id="sessionStatus" style="display:none;"></p>
 
     <!-- Itinerary Box -->
     <div id="itinerary" class="itinerary hidden"></div>
@@ -70,6 +58,7 @@
 
 </div>
 
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

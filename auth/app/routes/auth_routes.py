@@ -8,6 +8,7 @@ from .. import models, schemas
 from ..auth.otp import (
     create_and_send_phone_otp_for_signup,
     create_and_send_google_phone_otp,
+    create_and_send_email_otp_for_login,
 )
 from ..auth.google_oauth import (
     build_google_auth_url,
@@ -114,6 +115,57 @@ def phone_signup_verify(payload: schemas.PhoneOtpVerifyRequest,
         name=user.name,
     )
 
+# ========= EMAIL LOGIN FLOW =========
+
+@router.post("/email/login/send-otp")
+def email_login_send_otp(payload: schemas.EmailLoginRequest,
+                         db: Session = Depends(get_db)):
+    # Check if user exists
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found. Please sign up first."
+        )
+    
+    try:
+        create_and_send_email_otp_for_login(db, payload.email)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+    return {"message": "OTP sent to email"}
+
+@router.post("/email/login/verify", response_model=schemas.AuthResponse)
+def email_login_verify(payload: schemas.EmailOtpVerifyRequest,
+                       db: Session = Depends(get_db)):
+    otp_row = db.query(models.OtpCode).filter(
+        models.OtpCode.email == payload.email,
+        models.OtpCode.code == payload.code,
+        models.OtpCode.purpose == "email_login",
+        models.OtpCode.verified == False,
+    ).first()
+
+    if not otp_row:
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+
+    if otp_row.expires_at and otp_row.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="OTP expired")
+
+    otp_row.verified = True
+    db.commit()
+
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return schemas.AuthResponse(
+        register_id=user.register_id,
+        auth_provider=user.auth_provider,
+        email=user.email,
+        phone=user.phone,
+        name=user.name,
+    )
+
 # ========= GOOGLE FLOW =========
 
 @router.get("/google/url")
@@ -129,7 +181,9 @@ def get_google_auth_url():
 def google_callback(code: str, state: str = "xyz", db: Session = Depends(get_db)):
     """
     Google redirects here with ?code=...
-    We exchange code for tokens, get userinfo, and store it as a temp identity.
+    We exchange code for tokens, get userinfo.
+    If user exists, login immediately.
+    If new, store temp identity and ask for phone.
     """
     tokens = exchange_code_for_tokens(code)
     access_token = tokens.get("access_token")
@@ -137,14 +191,37 @@ def google_callback(code: str, state: str = "xyz", db: Session = Depends(get_db)
         raise HTTPException(status_code=400, detail="No access_token")
 
     userinfo = get_google_userinfo(access_token)
+    email = userinfo.get("email")
+    google_id = userinfo.get("sub")
+
+    # Check if user exists
+    existing_user = db.query(models.User).filter(
+        (models.User.email == email) | (models.User.google_id == google_id)
+    ).first()
+
+    if existing_user:
+        # User exists, return login info directly
+        # Note: In a real app, you'd issue a JWT here.
+        # We'll return a special status to let frontend know login is complete.
+        return {
+            "status": "login_success",
+            "message": "Logged in successfully",
+            "user": {
+                "register_id": existing_user.register_id,
+                "email": existing_user.email,
+                "name": existing_user.name,
+                "phone": existing_user.phone
+            }
+        }
+
+    # New user, proceed to phone verification
     google_temp_id = create_temp_google_identity(db, userinfo)
 
-    # In a real app you might redirect to your front-end.
-    # For now, we just return the temp id.
     return {
+        "status": "needs_phone_verification",
         "message": "Google login success. Now collect phone number and verify OTP.",
         "google_temp_id": str(google_temp_id),
-        "google_email": userinfo.get("email"),
+        "google_email": email,
         "google_name": userinfo.get("name"),
     }
 

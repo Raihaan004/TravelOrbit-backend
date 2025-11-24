@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse
+import json
 from sqlalchemy.orm import Session
 from uuid import uuid4
 from datetime import datetime
@@ -8,6 +10,7 @@ from .. import models, schemas
 from ..auth.otp import (
     create_and_send_phone_otp_for_signup,
     create_and_send_google_phone_otp,
+    create_and_send_email_otp,
 )
 from ..auth.google_oauth import (
     build_google_auth_url,
@@ -114,6 +117,98 @@ def phone_signup_verify(payload: schemas.PhoneOtpVerifyRequest,
         name=user.name,
     )
 
+# ========= EMAIL FLOW =========
+
+@router.post("/email/login")
+def email_login_send_otp(payload: schemas.EmailLoginRequest,
+                         db: Session = Depends(get_db)):
+    try:
+        print(f"[OTP] Received request for email: {payload.email}")
+        
+        # Check if user exists
+        user = db.query(models.User).filter(models.User.email == payload.email).first()
+        
+        if user:
+            # Existing user: Send Email OTP
+            # Check if there's a recent unverified OTP for this email
+            existing_otp = db.query(models.OtpCode).filter(
+                models.OtpCode.email == payload.email,
+                models.OtpCode.purpose == "email_login",
+                models.OtpCode.verified == False,
+            ).first()
+            
+            if existing_otp:
+                db.delete(existing_otp)
+                db.commit()
+
+            create_and_send_email_otp(db, payload.email)
+            print(f"[OTP] Successfully sent OTP to {payload.email}")
+            return {"status": "existing", "message": "OTP sent to email"}
+        else:
+            # New user: Return status so frontend can ask for phone
+            print(f"[OTP] New user email: {payload.email}")
+            return {"status": "new_user", "message": "User not found, proceed to phone verification"}
+
+    except Exception as e:
+        db.rollback()
+        print(f"[OTP] ERROR in email_login_send_otp: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to process email: {str(e)}"
+        )
+
+@router.post("/email/verify", response_model=schemas.AuthResponse)
+def email_login_verify(payload: schemas.EmailVerifyRequest,
+                       db: Session = Depends(get_db)):
+    otp_row = db.query(models.OtpCode).filter(
+        models.OtpCode.email == payload.email,
+        models.OtpCode.code == payload.code,
+        models.OtpCode.purpose == "email_login",
+        models.OtpCode.verified == False,
+    ).first()
+
+    if not otp_row:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP"
+        )
+
+    if otp_row.expires_at and otp_row.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP expired"
+        )
+
+    otp_row.verified = True
+    db.commit()
+
+    # Check if user exists
+    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    
+    if not user:
+        # Create new user with dummy phone if needed
+        register_id = f"REG-{uuid4().hex[:10]}"
+        dummy_phone = f"no-phone-{uuid4().hex[:10]}"
+        
+        user = models.User(
+            register_id=register_id,
+            email=payload.email,
+            name="User",
+            phone=dummy_phone,
+            auth_provider="email",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    
+    return schemas.AuthResponse(
+        register_id=user.register_id,
+        auth_provider=user.auth_provider,
+        email=user.email,
+        phone=user.phone,
+        name=user.name,
+    )
+
 # ========= GOOGLE FLOW =========
 
 @router.get("/google/url")
@@ -125,7 +220,7 @@ def get_google_auth_url():
     url = build_google_auth_url()
     return {"auth_url": url}
 
-@router.get("/google/callback")
+@router.get("/google/callback", response_class=HTMLResponse)
 def google_callback(code: str, state: str = "xyz", db: Session = Depends(get_db)):
     """
     Google redirects here with ?code=...
@@ -134,19 +229,64 @@ def google_callback(code: str, state: str = "xyz", db: Session = Depends(get_db)
     tokens = exchange_code_for_tokens(code)
     access_token = tokens.get("access_token")
     if not access_token:
-        raise HTTPException(status_code=400, detail="No access_token")
+        return HTMLResponse(content="<h1>Error: No access token</h1>", status_code=400)
 
     userinfo = get_google_userinfo(access_token)
-    google_temp_id = create_temp_google_identity(db, userinfo)
+    
+    # Check if user already exists
+    user = db.query(models.User).filter(
+        (models.User.email == userinfo.get("email")) | 
+        (models.User.google_id == userinfo.get("sub")) # 'sub' is google id
+    ).first()
 
-    # In a real app you might redirect to your front-end.
-    # For now, we just return the temp id.
-    return {
-        "message": "Google login success. Now collect phone number and verify OTP.",
-        "google_temp_id": str(google_temp_id),
-        "google_email": userinfo.get("email"),
-        "google_name": userinfo.get("name"),
-    }
+    response_data = {}
+
+    if user:
+        # User exists, log them in directly
+        # Update google_id if missing
+        if not user.google_id:
+            user.google_id = userinfo.get("sub")
+            db.commit()
+            
+        response_data = {
+            "status": "success",
+            "user": {
+                "name": user.name,
+                "email": user.email,
+                "phone": user.phone,
+                "register_id": user.register_id,
+                "auth_provider": user.auth_provider
+            }
+        }
+    else:
+        # New user or partial info
+        google_temp_id = create_temp_google_identity(db, userinfo)
+        response_data = {
+            "status": "needs_phone",
+            "google_temp_id": str(google_temp_id),
+            "google_email": userinfo.get("email"),
+            "google_name": userinfo.get("name")
+        }
+
+    # Return HTML that posts message to opener
+    html_content = f"""
+    <html>
+    <body>
+        <h1>Login Successful</h1>
+        <p>Closing window...</p>
+        <script>
+            const data = {json.dumps(response_data)};
+            if (window.opener) {{
+                window.opener.postMessage({{ type: 'GOOGLE_LOGIN_RESULT', payload: data }}, '*');
+                window.close();
+            }} else {{
+                document.body.innerHTML = "<h1>Login processed. You can close this window.</h1>";
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
 @router.post("/google/phone/send-otp")
 def google_phone_send_otp(payload: schemas.GooglePhoneSendOtpRequest,

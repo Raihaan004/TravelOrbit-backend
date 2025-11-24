@@ -5,6 +5,7 @@ from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 from ..config import settings
 from ..models import OtpCode
+from ..email_service import EmailService
 
 def get_twilio_client():
     """Initialize Twilio client on-demand instead of at module import time"""
@@ -14,6 +15,13 @@ def generate_otp(length: int = 6) -> str:
     return "".join(str(random.randint(0, 9)) for _ in range(length))
 
 def send_otp_sms(phone: str, code: str):
+    # Ensure phone format is E.164
+    if phone and not phone.startswith('+'):
+        if len(phone) == 10 and phone.isdigit():
+            phone = f"+91{phone}"
+        else:
+            phone = f"+{phone}"
+
     try:
         twilio_client = get_twilio_client()
         message = twilio_client.messages.create(
@@ -82,3 +90,36 @@ def create_and_send_google_phone_otp(db: Session, google_temp_id: str, phone: st
 
     send_otp_sms(phone, code)
     return otp_row2.id  # we can use this as another temp id
+
+def create_and_send_email_otp(db: Session, email: str) -> None:
+    print(f"[create_and_send_email_otp] Starting for email: {email}")
+    
+    code = generate_otp()
+    print(f"[create_and_send_email_otp] Generated OTP code: {code}")
+    
+    otp = OtpCode(
+        email=email,
+        code=code,
+        purpose="email_login",
+        expires_at=OtpCode.default_expiry(),
+        verified=False
+    )
+    
+    print(f"[create_and_send_email_otp] Adding OTP to database")
+    db.add(otp)
+    db.commit()
+    db.refresh(otp)
+    
+    # Send Email
+    subject = "Your TravelOrbit Login Code"
+    html_body = f"""
+    <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 5px;">
+        <h2>TravelOrbit Login</h2>
+        <p>Your verification code is:</p>
+        <h1 style="color: #667eea; letter-spacing: 5px;">{code}</h1>
+        <p>This code will expire in 5 minutes.</p>
+    </div>
+    """
+    
+    print(f"[create_and_send_email_otp] Sending Email to {email}")
+    EmailService.send_email(email, subject, html_body)

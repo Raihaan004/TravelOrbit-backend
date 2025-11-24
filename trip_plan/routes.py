@@ -256,7 +256,7 @@ def generate_packages(trip: models.Trip, budget_override: Optional[str] = None) 
     days = trip.duration_days or 1
     people = _estimate_people(trip)
 
-    base_per_person_per_day = 1500  # keep in sync with mock_payment
+    base_per_person_per_day = 1500  # keep in sync with app.payments.utils
 
     budget_ranges = {
         "cheap": (0.7, 0.95),
@@ -359,6 +359,35 @@ def get_trip(trip_id: str, db: Session = Depends(get_db)):
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
     return trip
+
+
+# -------- Update Passengers --------
+@router.post("/trip-plan/{trip_id}/passengers")
+def update_passengers(trip_id: str,
+                      payload: schemas.TripPassengersUpdate,
+                      db: Session = Depends(get_db)):
+    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    # Update passengers
+    trip.passengers = payload.passengers
+    if payload.contact_phone:
+        trip.contact_phone = payload.contact_phone
+    
+    # Update ownership if changed (e.g. guest -> logged in user)
+    if payload.register_id:
+        trip.register_id = payload.register_id
+    if payload.email:
+        trip.email = payload.email
+    
+    # Also update counts based on passengers list if needed
+    # For now, we just store the list
+    
+    db.add(trip)
+    db.commit()
+    
+    return {"message": "Passengers updated successfully"}
 
 
 # -------- Feedback --------

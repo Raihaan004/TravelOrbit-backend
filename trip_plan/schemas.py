@@ -75,6 +75,14 @@ class TripMessageResponse(BaseModel):
     is_final_itinerary: bool = False
 
 
+# ----- Passenger Update -----
+class TripPassengersUpdate(BaseModel):
+    register_id: str
+    email: EmailStr
+    passengers: List[dict]  # [{"name": "...", "age": ..., "phone": "..."}]
+    contact_phone: Optional[str] = None
+
+
 # ----- Feedback -----
 class FeedbackCreate(BaseModel):
     rating: int  # 1-5

@@ -10,3 +10,4 @@ twilio
 requests
 httpx         # <--- NEW for OpenRouter
 stripe
+razorpay
