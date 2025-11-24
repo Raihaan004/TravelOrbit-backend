@@ -21,23 +21,3 @@ app.include_router(webhook_routes.router)
 def root():
     return {"message": "Auth API running"}
 
-@app.get("/test-twilio")
-def test_twilio():
-    """Test Twilio connection"""
-    from .config import settings
-    from .auth.otp import get_twilio_client
-    
-    try:
-        client = get_twilio_client()
-        account = client.api.accounts(settings.TWILIO_ACCOUNT_SID).fetch()
-        return {
-            "status": "success",
-            "message": "Twilio connection successful",
-            "account_sid": account.sid,
-            "friendly_name": account.friendly_name
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e)
-        }

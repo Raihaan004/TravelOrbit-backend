@@ -475,6 +475,7 @@ class EmailService:
         """
         
         trip_summary = cls._build_trip_summary_html(trip, payment, booking_number)
+        hotel_info = cls._build_hotel_info_html(trip)
         daily_itinerary = cls._build_daily_itinerary_html(trip)
         travelers = cls._build_travelers_html(trip)
         invoice = cls._build_invoice_html(trip, payment, booking_number)
@@ -483,6 +484,7 @@ class EmailService:
         complete_html = f"""
         {header}
         {trip_summary}
+        {hotel_info}
         {daily_itinerary}
         {travelers}
         {invoice}
@@ -548,6 +550,48 @@ class EmailService:
         except Exception as e:
             print(f"❌ Error sending email to {to_email}: {e}")
             return False
+
+    @staticmethod
+    def _build_hotel_info_html(trip: Trip) -> str:
+        """Build hotel information section"""
+        if not trip.ai_summary_json:
+            return ""
+            
+        try:
+            itinerary_data = trip.ai_summary_json
+            if isinstance(itinerary_data, str):
+                import json
+                itinerary_data = json.loads(itinerary_data)
+                
+            hotel = itinerary_data.get("hotel")
+            if not hotel:
+                return ""
+                
+            name = hotel.get("name", "Hotel")
+            rating = hotel.get("rating", "")
+            description = hotel.get("description", "")
+            map_url = hotel.get("map_url", "")
+            image_search = hotel.get("image_search", "")
+            
+            hotel_html = f"""
+            <div class="container">
+                <h2>🏨 Accommodation Details</h2>
+                <div class="booking-info" style="border-left-color: #ff9800; background: #fff3e0;">
+                    <div style="font-size: 18px; font-weight: bold; color: #e65100;">{name}</div>
+                    {f'<div style="color: #f57c00; font-weight: 500;">{rating}</div>' if rating else ''}
+                    {f'<div style="margin-top: 5px; color: #555;">{description}</div>' if description else ''}
+                    
+                    <div style="margin-top: 10px;">
+                        {f'<a href="{map_url}" style="text-decoration: none; color: #e65100; font-weight: bold; margin-right: 15px;">📍 View on Map</a>' if map_url else ''}
+                        {f'<a href="{image_search}" style="text-decoration: none; color: #e65100; font-weight: bold;">📷 View Photos</a>' if image_search else ''}
+                    </div>
+                </div>
+            </div>
+            """
+            return hotel_html
+            
+        except Exception as e:
+            return ""
 
 
 # Convenience functions for backwards compatibility

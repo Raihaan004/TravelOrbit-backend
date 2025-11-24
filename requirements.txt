@@ -6,8 +6,8 @@ python-dotenv
 pydantic
 pydantic-settings
 pydantic[email]
-twilio
 requests
 httpx         # <--- NEW for OpenRouter
+twilio
 stripe
 razorpay

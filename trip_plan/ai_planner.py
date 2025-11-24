@@ -40,6 +40,8 @@ When you reply, ALWAYS output in two sections:
 - For each place, add:
   - Google Maps link: https://www.google.com/maps/search/?api=1&query=PLACE+CITY
   - Image search link: https://www.google.com/search?q=PLACE+CITY&tbm=isch
+- Suggest a hotel based on the budget level (cheap, moderate, luxury).
+- Check typical weather for the destination during the travel dates. Inform the user about the expected weather and advise if it is suitable for the trip or if they need specific preparations.
 
 2) JSON SECTION (for the backend)
 After the human text, output a line with exactly:
@@ -64,6 +66,14 @@ Then output a JSON object:
   },
   "itinerary": {
     "title": "...",
+    "hotel": {
+        "name": "Hotel Name",
+        "rating": "4 stars",
+        "price_range": "₹8000-₹12000 per night",
+        "description": "Brief description",
+        "map_url": "https://www.google.com/maps/search/?api=1&query=Hotel+Name+City",
+        "image_search": "https://www.google.com/search?q=Hotel+Name+City&tbm=isch"
+    },
     "days": [
       {
         "day": 1,
@@ -83,6 +93,7 @@ Then output a JSON object:
 }
 
 Rules:
+- All monetary values (hotel prices, etc.) must be in Indian Rupees (INR).
 - If you are still collecting information, set is_final_itinerary = false and you may omit itinerary.
 - Always include updated_fields with only the fields that changed this turn.
 - When ready with full plan, set is_final_itinerary = true and include itinerary.

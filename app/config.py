@@ -6,8 +6,7 @@ class Settings(BaseSettings):
     # Twilio
     TWILIO_ACCOUNT_SID: str | None = None
     TWILIO_AUTH_TOKEN: str | None = None
-    TWILIO_FROM_NUMBER: str | None = None
-    TWILIO_WHATSAPP_NUMBER: str | None = None
+    TWILIO_PHONE_NUMBER: str | None = None
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str | None = None

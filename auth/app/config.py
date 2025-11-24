@@ -4,10 +4,10 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     DATABASE_URL: str
 
-    TWILIO_ACCOUNT_SID: str
-    TWILIO_AUTH_TOKEN: str
-    TWILIO_FROM_NUMBER: str
-    TWILIO_WHATSAPP_NUMBER: str
+    # Twilio Settings
+    TWILIO_ACCOUNT_SID: str | None = None
+    TWILIO_AUTH_TOKEN: str | None = None
+    TWILIO_PHONE_NUMBER: str | None = None
 
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str

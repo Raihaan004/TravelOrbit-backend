@@ -2,37 +2,28 @@ import random
 from datetime import datetime
 from sqlalchemy.orm import Session
 from twilio.rest import Client
-from twilio.base.exceptions import TwilioRestException
 from ..config import settings
 from ..models import OtpCode
 from ..email_service import EmailService
-
-def get_twilio_client():
-    """Initialize Twilio client on-demand instead of at module import time"""
-    return Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
 def generate_otp(length: int = 6) -> str:
     return "".join(str(random.randint(0, 9)) for _ in range(length))
 
 def send_otp_sms(phone: str, code: str):
-    # Ensure phone format is E.164
-    if phone and not phone.startswith('+'):
-        if len(phone) == 10 and phone.isdigit():
-            phone = f"+91{phone}"
-        else:
-            phone = f"+{phone}"
+    if not settings.TWILIO_ACCOUNT_SID or not settings.TWILIO_AUTH_TOKEN or not settings.TWILIO_PHONE_NUMBER:
+        print("❌ Twilio credentials missing in .env")
+        raise Exception("Twilio credentials not configured.")
 
     try:
-        twilio_client = get_twilio_client()
-        message = twilio_client.messages.create(
-            body=f"Your verification code is: {code}",
-            from_=settings.TWILIO_FROM_NUMBER,
+        client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+        
+        message = client.messages.create(
+            body=f"Your TravelOrbit verification code is {code}",
+            from_=settings.TWILIO_PHONE_NUMBER,
             to=phone
         )
         print(f"SMS sent successfully. SID: {message.sid}")
-    except TwilioRestException as e:
-        print(f"Twilio error: {e.msg}")
-        raise Exception(f"SMS sending failed: {e.msg}")
+            
     except Exception as e:
         print(f"Error sending OTP SMS: {str(e)}")
         raise Exception(f"SMS sending failed: {str(e)}")

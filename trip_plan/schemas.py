@@ -98,6 +98,15 @@ class Activity(BaseModel):
     category: Optional[str] = None
 
 
+class Hotel(BaseModel):
+    name: str
+    rating: Optional[str] = None
+    price_range: Optional[str] = None
+    description: Optional[str] = None
+    map_url: Optional[str] = None
+    image_search: Optional[str] = None
+
+
 class DayPlan(BaseModel):
     day: int
     title: str
@@ -106,6 +115,7 @@ class DayPlan(BaseModel):
 
 class ItineraryJSON(BaseModel):
     title: str
+    hotel: Optional[Hotel] = None
     days: List[DayPlan]
 
 

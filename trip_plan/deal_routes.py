@@ -15,6 +15,7 @@ from urllib.parse import quote_plus
 import httpx
 import base64
 import io
+import asyncio
 
 from auth.app.database import get_db
 from auth.app.config import settings
@@ -106,6 +107,9 @@ DESTINATION_FALLBACKS = [
     "Singapore", "Paris", "London", "Bangkok", "Kerala", "Rishikesh"
 ]
 
+# Lock to prevent race conditions during daily deal generation
+generation_lock = asyncio.Lock()
+
 router = APIRouter(tags=["Deals"])
 logger = logging.getLogger(__name__)
 
@@ -132,131 +136,149 @@ async def get_deals_of_day(db: Session = Depends(get_db)):
 
     # If no deals exist for today, generate them now (up to 5)
     if not deals:
-        generated = []
-        used_destinations = set()
-        for i in range(5):
-            try:
-                # try generating unique destinations (retry a few times if duplicate)
-                attempts = 0
-                deal_data = await generate_deal_with_ai(generate_package=True)
-                dest = (deal_data.get("destination") or "").strip()
-                while dest and dest.lower() in used_destinations and attempts < 3:
-                    attempts += 1
-                    deal_data = await generate_deal_with_ai(generate_package=True)
-                    dest = (deal_data.get("destination") or "").strip()
-
-                # If still duplicate or missing, pick a fallback random destination
-                if not dest or dest.lower() in used_destinations:
-                    fallback = random.choice([d for d in DESTINATION_FALLBACKS if d.lower() not in used_destinations] or DESTINATION_FALLBACKS)
-                    deal_data["destination"] = fallback
-                    dest = fallback
-
-                if dest:
-                    used_destinations.add(dest.lower())
-
-                # parse optional ISO date strings into date objects and ensure future dates
-                parsed_start = None
-                parsed_end = None
-                try:
-                    sd = deal_data.get("start_date")
-                    if sd:
-                        parsed_start = datetime.fromisoformat(sd).date()
-                except Exception:
-                    parsed_start = None
-                try:
-                    ed = deal_data.get("end_date")
-                    if ed:
-                        parsed_end = datetime.fromisoformat(ed).date()
-                except Exception:
-                    parsed_end = None
-
-                # If parsed dates are in the past, push them into the near future
-                try:
-                    today_local = date.today()
-                    if parsed_start and parsed_start < today_local:
-                        # default start 7 days from today
-                        parsed_start = today_local + timedelta(days=7)
-                        if deal_data.get("duration_days"):
-                            parsed_end = parsed_start + timedelta(days=max(0, int(deal_data.get("duration_days")) - 1))
-                        elif parsed_end and parsed_end < parsed_start:
-                            parsed_end = parsed_start
-                    elif parsed_start is None and deal_data.get("duration_days"):
-                        # if no explicit start but duration exists, set start 7 days from today
-                        parsed_start = date.today() + timedelta(days=7)
-                        parsed_end = parsed_start + timedelta(days=max(0, int(deal_data.get("duration_days")) - 1))
-                except Exception:
-                    pass
-
-                deal = models.DealOfDay(
-                    id=str(uuid.uuid4()),
-                    title=deal_data.get("title"),
-                    destination=deal_data.get("destination", "Unknown"),
-                    description=deal_data.get("description", ""),
-                    original_price=deal_data.get("original_price", 10000),
-                    discounted_price=deal_data.get("discounted_price", 7000),
-                    currency="INR",
-                    ai_generated=settings.OPENROUTER_MODEL or "llama-2-7b",
-                    generated_date=today,
-                    is_active=1,
-                    image_url=None,
-                    # package fields (optional)
-                    min_persons=deal_data.get("min_persons"),
-                    max_persons=deal_data.get("max_persons"),
-                    duration_days=deal_data.get("duration_days"),
-                    start_date=parsed_start,
-                    end_date=parsed_end,
-                    inclusions=deal_data.get("inclusions"),
-                    itinerary_json=deal_data.get("itinerary"),
-                    is_international=1 if deal_data.get("is_international") else 0,
+        # Use a lock to ensure only ONE request triggers generation
+        async with generation_lock:
+            # Double-check: maybe another request finished generating while we were waiting for the lock
+            deals = (
+                db.query(models.DealOfDay)
+                .filter(
+                    models.DealOfDay.is_active == 1,
+                    func.DATE(models.DealOfDay.generated_date) == today,
                 )
-                # Validate AI-provided image URL (if any). Normalize scheme and probe with a quick HEAD.
-                raw_img = deal_data.get("image_url")
-                valid_img = None
-                if raw_img:
-                    temp = raw_img
-                    if temp.startswith("//"):
-                        temp = "https:" + temp
-                    elif not temp.startswith(("http://", "https://")):
-                        temp = "https://" + temp
-                    try:
-                        async with httpx.AsyncClient(timeout=5) as probe_client:
-                            head_resp = await probe_client.head(temp, follow_redirects=True)
-                            if head_resp.status_code < 400:
-                                valid_img = temp
-                    except Exception:
-                        valid_img = None
-
-                # If we don't have a validated image URL, try image provider APIs (Pexels/Unsplash) then fallback
-                if not valid_img:
-                    try:
-                        img = await fetch_image_for_destination(deal.destination or deal.title or "travel")
-                        if img:
-                            valid_img = img
-                        else:
-                            q = quote_plus(deal.destination or deal.title or "travel")
-                            valid_img = f"https://source.unsplash.com/600x400/?{q}"
-                    except Exception:
-                        q = quote_plus(deal.destination or deal.title or "travel")
-                        valid_img = f"https://source.unsplash.com/600x400/?{q}"
-
-                deal.image_url = valid_img
-                db.add(deal)
-                generated.append(deal)
-            except Exception as e:
-                logger.error(f"Error generating deal in GET /deals: {str(e)}")
-                continue
-        db.commit()
-
-        # reload deals
-        deals = (
-            db.query(models.DealOfDay)
-            .filter(
-                models.DealOfDay.is_active == 1,
-                func.DATE(models.DealOfDay.generated_date) == today,
+                .limit(5)
+                .all()
             )
-            .limit(5)
-            .all()
-        )
+            
+            if deals:
+                # Deals were generated by someone else while we waited
+                pass
+            else:
+                # We are the first! Generate deals.
+                generated = []
+                used_destinations = set()
+                for i in range(5):
+                    try:
+                        # try generating unique destinations (retry a few times if duplicate)
+                        attempts = 0
+                        deal_data = await generate_deal_with_ai(generate_package=True)
+                        dest = (deal_data.get("destination") or "").strip()
+                        while dest and dest.lower() in used_destinations and attempts < 3:
+                            attempts += 1
+                            deal_data = await generate_deal_with_ai(generate_package=True)
+                            dest = (deal_data.get("destination") or "").strip()
+
+                        # If still duplicate or missing, pick a fallback random destination
+                        if not dest or dest.lower() in used_destinations:
+                            fallback = random.choice([d for d in DESTINATION_FALLBACKS if d.lower() not in used_destinations] or DESTINATION_FALLBACKS)
+                            deal_data["destination"] = fallback
+                            dest = fallback
+
+                        if dest:
+                            used_destinations.add(dest.lower())
+
+                        # parse optional ISO date strings into date objects and ensure future dates
+                        parsed_start = None
+                        parsed_end = None
+                        try:
+                            sd = deal_data.get("start_date")
+                            if sd:
+                                parsed_start = datetime.fromisoformat(sd).date()
+                        except Exception:
+                            parsed_start = None
+                        try:
+                            ed = deal_data.get("end_date")
+                            if ed:
+                                parsed_end = datetime.fromisoformat(ed).date()
+                        except Exception:
+                            parsed_end = None
+
+                        # If parsed dates are in the past, push them into the near future
+                        try:
+                            today_local = date.today()
+                            if parsed_start and parsed_start < today_local:
+                                # default start 7 days from today
+                                parsed_start = today_local + timedelta(days=7)
+                                if deal_data.get("duration_days"):
+                                    parsed_end = parsed_start + timedelta(days=max(0, int(deal_data.get("duration_days")) - 1))
+                                elif parsed_end and parsed_end < parsed_start:
+                                    parsed_end = parsed_start
+                            elif parsed_start is None and deal_data.get("duration_days"):
+                                # if no explicit start but duration exists, set start 7 days from today
+                                parsed_start = date.today() + timedelta(days=7)
+                                parsed_end = parsed_start + timedelta(days=max(0, int(deal_data.get("duration_days")) - 1))
+                        except Exception:
+                            pass
+
+                        deal = models.DealOfDay(
+                            id=str(uuid.uuid4()),
+                            title=deal_data.get("title"),
+                            destination=deal_data.get("destination", "Unknown"),
+                            description=deal_data.get("description", ""),
+                            original_price=deal_data.get("original_price", 10000),
+                            discounted_price=deal_data.get("discounted_price", 7000),
+                            currency="INR",
+                            ai_generated=settings.OPENROUTER_MODEL or "llama-2-7b",
+                            generated_date=today,
+                            is_active=1,
+                            image_url=None,
+                            # package fields (optional)
+                            min_persons=deal_data.get("min_persons"),
+                            max_persons=deal_data.get("max_persons"),
+                            duration_days=deal_data.get("duration_days"),
+                            start_date=parsed_start,
+                            end_date=parsed_end,
+                            inclusions=deal_data.get("inclusions"),
+                            itinerary_json=deal_data.get("itinerary"),
+                            is_international=1 if deal_data.get("is_international") else 0,
+                        )
+                        # Validate AI-provided image URL (if any). Normalize scheme and probe with a quick HEAD.
+                        raw_img = deal_data.get("image_url")
+                        valid_img = None
+                        if raw_img:
+                            temp = raw_img
+                            if temp.startswith("//"):
+                                temp = "https:" + temp
+                            elif not temp.startswith(("http://", "https://")):
+                                temp = "https://" + temp
+                            try:
+                                async with httpx.AsyncClient(timeout=5) as probe_client:
+                                    head_resp = await probe_client.head(temp, follow_redirects=True)
+                                    if head_resp.status_code < 400:
+                                        valid_img = temp
+                            except Exception:
+                                valid_img = None
+
+                        # If we don't have a validated image URL, try image provider APIs (Pexels/Unsplash) then fallback
+                        if not valid_img:
+                            try:
+                                img = await fetch_image_for_destination(deal.destination or deal.title or "travel")
+                                if img:
+                                    valid_img = img
+                                else:
+                                    q = quote_plus(deal.destination or deal.title or "travel")
+                                    valid_img = f"https://source.unsplash.com/600x400/?{q}"
+                            except Exception:
+                                q = quote_plus(deal.destination or deal.title or "travel")
+                                valid_img = f"https://source.unsplash.com/600x400/?{q}"
+
+                        deal.image_url = valid_img
+                        db.add(deal)
+                        generated.append(deal)
+                    except Exception as e:
+                        logger.error(f"Error generating deal in GET /deals: {str(e)}")
+                        continue
+                db.commit()
+
+                # reload deals
+                deals = (
+                    db.query(models.DealOfDay)
+                    .filter(
+                        models.DealOfDay.is_active == 1,
+                        func.DATE(models.DealOfDay.generated_date) == today,
+                    )
+                    .limit(5)
+                    .all()
+                )
     deal_responses = []
     for deal in deals:
         discount_pct = calculate_discount_percentage(

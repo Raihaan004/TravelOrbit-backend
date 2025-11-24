@@ -689,12 +689,37 @@ async function renderItinerary() {
     itineraryBox.classList.remove("hidden");
     
     let html = `<h2 class="itinerary-title">${trip.ai_summary_json.title}</h2>`;
+    
+    // Show Hotel Recommendation if available
+    if (trip.ai_summary_json.hotel) {
+        const h = trip.ai_summary_json.hotel;
+        html += `
+        <div class="hotel-block" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #007bff;">
+            <h3 style="margin-top:0; color: #007bff;">🏨 Recommended Stay</h3>
+            <p><strong>${h.name}</strong> (${h.rating || ''})</p>
+            <p>${h.description || ''}</p>
+            <p><em>${h.price_range || ''}</em></p>
+            <div style="margin-top: 10px;">
+                ${h.map_url ? `<a href="${h.map_url}" target="_blank" style="margin-right: 10px;">📍 View on Map</a>` : ''}
+                ${h.image_search ? `<a href="${h.image_search}" target="_blank">📷 View Photos</a>` : ''}
+            </div>
+        </div>`;
+    }
+
     trip.ai_summary_json.days.forEach(day => {
         html += `
         <div class="day-block">
             <h3>Day ${day.day}: ${day.title}</h3>
             <ul>
-                ${day.activities.map(a => `<li>${a.name}</li>`).join("")}
+                ${day.activities.map(a => `
+                    <li style="margin-bottom: 10px;">
+                        <strong>${a.name}</strong> ${a.time ? `(${a.time})` : ''}
+                        <div style="font-size: 0.9em; margin-top: 4px;">
+                            ${a.map_url ? `<a href="${a.map_url}" target="_blank" style="text-decoration: none; margin-right: 10px;">📍 Map</a>` : ''}
+                            ${a.image_search ? `<a href="${a.image_search}" target="_blank" style="text-decoration: none;">📷 Photos</a>` : ''}
+                        </div>
+                    </li>
+                `).join("")}
             </ul>
         </div>`;
     });

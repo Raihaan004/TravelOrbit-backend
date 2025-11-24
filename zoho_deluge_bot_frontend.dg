@@ -1,0 +1,211 @@
+// TravelOrbit Bot Frontend - Deluge Script for Zoho
+// This script implements a complete WhatsApp-like bot frontend for the TravelOrbit backend
+// Replace 'https://your-backend.com' with your actual backend URL
+
+backend_url = "https://your-backend.com";
+
+// Main bot handler function
+// Parameters expected as input:
+// user_message, user_id, trip_id, user_email
+// Returns: Map with "message" and "trip_id"
+
+response = Map();
+response.put("message", "");
+response.put("trip_id", input.trip_id);
+
+// Normalize user input
+user_message = input.user_message.trim().toLowerCase();
+user_id = input.user_id;
+trip_id = input.trip_id;
+user_email = input.user_email;
+
+// Handle new conversations
+if (trip_id == "" || trip_id == null) {
+    // Start new trip session
+    start_response = invokeurl
+    [
+        url: backend_url + "/trip-plan/session/start"
+        type: POST
+        parameters: {
+            "register_id": user_id,
+            "email": user_email != "" ? user_email : user_id + "@example.com"
+        }
+    ];
+    if (start_response.get("trip_id") != null) {
+        trip_id = start_response.get("trip_id");
+        response.put("trip_id", trip_id);
+        response.put("message", "Hello! 👋 I'm your AI travel planner. I can help you plan amazing trips!\n\nTo get started, please tell me:\n\n1. 📍 Where are you traveling from?\n2. 🏖️ Where do you want to go?\n3. 👥 How many people are traveling?\n4. 📅 How many days is your trip?\n5. 💰 What's your budget (cheap/moderate/luxury)?\n6. 🎯 What interests you?\n\nOr, would you like to see today's amazing deals? Just say 'show deals'!");
+    } else {
+        response.put("message", "Sorry, I'm having trouble starting your trip planning session. Please try again later.");
+    }
+    return response;
+}
+
+// Handle special commands
+if (user_message.contains("show deals") || user_message.contains("deals")) {
+    deals_response = invokeurl
+    [
+        url: backend_url + "/deals"
+        type: GET
+    ];
+    if (deals_response.get("deals") != null) {
+        deals = deals_response.get("deals");
+        message = "🌟 Today's Amazing Deals!\n\n";
+        for each deal in deals {
+            discount = deal.get("discount_percentage");
+            price = deal.get("discounted_price");
+            message = message + "🏖️ " + deal.get("destination") + "\n";
+            message = message + "💰 ₹" + price.toString() + " (Save " + discount.toString() + "%)\n";
+            message = message + "📅 " + deal.get("duration_days") + " days\n\n";
+        }
+        message = message + "Reply with the destination name to book any deal!";
+        response.put("message", message);
+    } else {
+        response.put("message", "Sorry, I couldn't fetch today's deals. Please try again.");
+    }
+    return response;
+}
+
+// Check if user is trying to book a deal
+deal_found = false;
+deal_id = "";
+deals_response = invokeurl
+[
+    url: backend_url + "/deals"
+    type: GET
+];
+if (deals_response.get("deals") != null) {
+    deals = deals_response.get("deals");
+    for each deal in deals {
+        dest = deal.get("destination").toLowerCase();
+        if (user_message.contains(dest)) {
+            deal_found = true;
+            deal_id = deal.get("id");
+            break;
+        }
+    }
+}
+
+if (deal_found) {
+    // Start deal booking
+    booking_response = invokeurl
+    [
+        url: backend_url + "/deals/" + deal_id + "/start-plan"
+        type: POST
+        parameters: {
+            "register_id": user_id,
+            "email": user_email != "" ? user_email : user_id + "@example.com",
+            "from_city": "Your City",
+            "passenger_name": "User",
+            "passenger_age": 30,
+            "contact_phone": user_id
+        }
+    ];
+    if (booking_response.get("trip_id") != null) {
+        message = booking_response.get("ai_message") + "\n\n💳 Reply 'pay now' to proceed to payment!";
+        response.put("message", message);
+        response.put("trip_id", booking_response.get("trip_id"));
+    } else {
+        response.put("message", "Sorry, couldn't start the booking. Please try again.");
+    }
+    return response;
+}
+
+// Check if user wants to select a package
+if (user_message.contains("select") || user_message.contains("choose")) {
+    // Get packages first
+    packages_response = invokeurl
+    [
+        url: backend_url + "/trip-plan/" + trip_id + "/packages"
+        type: GET
+    ];
+    if (packages_response.get("packages") != null) {
+        packages = packages_response.get("packages");
+        selected_package = null;
+        for each pkg in packages {
+            pkg_name = pkg.get("name").toLowerCase();
+            if (user_message.contains(pkg_name)) {
+                selected_package = pkg;
+                break;
+            }
+        }
+        if (selected_package != null) {
+            select_response = invokeurl
+            [
+                url: backend_url + "/trip-plan/" + trip_id + "/packages/" + selected_package.get("id") + "/select"
+                type: POST
+                parameters: {
+                    "register_id": user_id,
+                    "email": user_email != "" ? user_email : user_id + "@example.com"
+                }
+            ];
+            if (select_response.get("trip_id") != null) {
+                response.put("message", select_response.get("message") + "\n\n💳 Reply 'pay now' to complete your booking!");
+            } else {
+                response.put("message", "Sorry, couldn't select the package. Please try again.");
+            }
+            return response;
+        }
+    }
+}
+
+// Check if user wants to pay
+if (user_message.contains("pay now") || user_message.contains("payment")) {
+    // Assuming there's a payment endpoint
+    payment_response = invokeurl
+    [
+        url: backend_url + "/trips/" + trip_id + "/payment/mock"
+        type: POST
+        parameters: {}
+    ];
+    if (payment_response.get("status") == "success") {
+        response.put("message", "🎉 Payment successful! Your trip is confirmed. Safe travels! ✈️");
+    } else {
+        response.put("message", "Payment processing... Please complete the payment through the secure link sent to your email.");
+    }
+    return response;
+}
+
+// Handle regular trip planning conversation
+chat_response = invokeurl
+[
+    url: backend_url + "/trip-plan/session/message"
+    type: POST
+    parameters: {
+        "trip_id": trip_id,
+        "register_id": user_id,
+        "email": user_email != "" ? user_email : user_id + "@example.com",
+        "message": input.user_message  // Use original message
+    }
+];
+if (chat_response.get("trip_id") != null) {
+    ai_message = chat_response.get("ai_message");
+    is_final = chat_response.get("is_final_itinerary");
+
+    response.put("message", ai_message);
+
+    if (is_final) {
+        // Trip is planned, offer next steps
+        packages_response = invokeurl
+        [
+            url: backend_url + "/trip-plan/" + trip_id + "/packages"
+            type: GET
+        ];
+        if (packages_response.get("packages") != null) {
+            packages = packages_response.get("packages");
+            package_message = "\n\n🎯 Great! Here are your package options:\n\n";
+            for each pkg in packages {
+                package_message = package_message + "📦 " + pkg.get("name") + "\n";
+                package_message = package_message + "💰 ₹" + pkg.get("min_price") + " - ₹" + pkg.get("max_price") + "\n";
+                package_message = package_message + pkg.get("description") + "\n\n";
+            }
+            package_message = package_message + "Reply with 'select [package name]' to choose!";
+            response.put("message", ai_message + package_message);
+        }
+    }
+} else {
+    response.put("message", "Sorry, I'm having trouble processing your message. Please try again.");
+}
+
+return response;</content>
+<parameter name="filePath">d:\Projects\travelorbit-backend\zoho_deluge_bot_frontend.dg

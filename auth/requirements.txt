@@ -3,5 +3,4 @@ uvicorn[standard]
 SQLAlchemy
 psycopg2-binary
 python-dotenv
-twilio
 requests

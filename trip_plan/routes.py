@@ -279,13 +279,31 @@ def generate_packages(trip: models.Trip, budget_override: Optional[str] = None) 
         p_min = min_mult + extra
         p_max = max_mult + extra
 
+        # Determine hotel based on budget AND package type
+        current_hotel = "Standard Hotel"
+        if budget == "cheap":
+             if name == "Essential": current_hotel = "Budget Stay / Hostel"
+             elif name == "Comfort": current_hotel = "2-Star Hotel"
+             elif name == "Premium": current_hotel = "3-Star Hotel"
+             elif name == "All-Inclusive": current_hotel = "3-Star Hotel + Meals"
+        elif budget == "moderate":
+             if name == "Essential": current_hotel = "3-Star Hotel"
+             elif name == "Comfort": current_hotel = "3-Star Premium Hotel"
+             elif name == "Premium": current_hotel = "4-Star Hotel"
+             elif name == "All-Inclusive": current_hotel = "4-Star Hotel + All Meals"
+        elif budget == "luxury":
+             if name == "Essential": current_hotel = "4-Star Hotel"
+             elif name == "Comfort": current_hotel = "5-Star Hotel"
+             elif name == "Premium": current_hotel = "5-Star Luxury Resort"
+             elif name == "All-Inclusive": current_hotel = "5-Star Resort + All Meals"
+
         min_price = int(Decimal(base_per_person_per_day) * Decimal(people) * Decimal(days) * Decimal(p_min))
         max_price = int(Decimal(base_per_person_per_day) * Decimal(people) * Decimal(days) * Decimal(p_max))
 
         packages.append({
             "id": uuid.uuid4().hex,
             "name": f"{budget.title()} {name}",
-            "description": f"{name} package for {budget} budget.",
+            "description": f"{name} package. Includes {current_hotel}.",
             "min_price": max(1, min_price),
             "max_price": max(1, max_price),
         })
