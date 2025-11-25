@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
 from typing import List
+import random # Added
+import hashlib # Added
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -15,6 +17,18 @@ from typing import Dict, Optional
 
 router = APIRouter(tags=["Trip Planning"])
 
+MYSTERY_DESTINATIONS = {
+    "india": {
+        "adventure": ["Rishikesh", "Manali", "Andaman", "Ladakh", "Spiti Valley", "Coorg"],
+        "nightlife": ["Goa", "Mumbai", "Bangalore", "Pune"],
+        "enjoyment": ["Kerala", "Udaipur", "Jaipur", "Pondicherry", "Ooty", "Munnar"]
+    },
+    "international": {
+        "adventure": ["Nepal", "Thailand", "Vietnam", "Bali", "New Zealand", "Costa Rica"],
+        "nightlife": ["Bangkok", "Dubai", "Singapore", "Las Vegas", "Ibiza", "Amsterdam"],
+        "enjoyment": ["Maldives", "Bali", "Sri Lanka", "Paris", "Switzerland", "Santorini"]
+    }
+}
 
 # -------- Start a new trip session --------
 @router.post("/trip-plan/session/start", response_model=schemas.TripSessionStartResponse)
@@ -27,6 +41,7 @@ def start_session(payload: schemas.TripSessionStartRequest,
         register_id=payload.register_id,
         email=payload.email,
         status="draft",
+        is_mystery_trip=1 if payload.is_mystery_trip else 0
     )
     db.add(trip)
     db.commit()
@@ -60,10 +75,23 @@ async def trip_message(payload: schemas.TripMessageRequest,
     db.add(user_msg)
     db.commit()
 
-    # 3) If this is a deal booking and already planned, don't call AI
-    if trip.is_deal_booking and trip.status == "planned":
+    # 3) If this is a deal booking or group trip and already planned, don't call AI
+    is_group_trip = trip.title and trip.title.startswith("Group Trip")
+    
+    # Only skip if it's a deal booking OR (group trip AND we already have the AI summary)
+    should_skip_ai = False
+    if trip.status == "planned":
+        if trip.is_deal_booking:
+            should_skip_ai = True
+        elif is_group_trip and trip.ai_summary_json:
+            should_skip_ai = True
+
+    if should_skip_ai:
         # Just acknowledge and don't call AI
-        ai_message_text = "Thank you! Your booking is confirmed. Proceed to payment whenever you're ready."
+        ai_message_text = "The group vote is complete and the trip is planned! You can now proceed to payment."
+        if trip.is_deal_booking:
+             ai_message_text = "Thank you! Your booking is confirmed. Proceed to payment whenever you're ready."
+             
         ai_msg = models.TripMessage(
             trip_id=trip.id,
             register_id=payload.register_id,
@@ -201,6 +229,56 @@ I'll create a personalized itinerary for you!"""
     # 5) Apply structured updates
     if json_data:
         updated = json_data.get("updated_fields") or {}
+
+        # --- MYSTERY TRIP LOGIC ---
+        if trip.is_mystery_trip and not trip.to_city:
+            mystery_prefs = updated.get("mystery_preferences")
+            if mystery_prefs:
+                # Save prefs
+                trip.mystery_preferences = mystery_prefs
+                
+                loc_type = str(mystery_prefs.get("location_type", "")).lower()
+                theme = str(mystery_prefs.get("theme", "")).lower()
+                
+                # Normalize
+                if "india" in loc_type: loc_type = "india"
+                elif "international" in loc_type or "outside" in loc_type: loc_type = "international"
+                else: loc_type = "india" # Default
+                
+                if "adventure" in theme: theme = "adventure"
+                elif "night" in theme: theme = "nightlife"
+                elif "enjoy" in theme: theme = "enjoyment"
+                else: theme = "enjoyment" # Default
+                
+                options = MYSTERY_DESTINATIONS.get(loc_type, {}).get(theme, [])
+                if not options:
+                     # Fallback if no match
+                     options = ["Goa", "Manali", "Kerala"] if loc_type == "india" else ["Thailand", "Dubai", "Bali"]
+
+                chosen_dest = random.choice(options)
+                trip.to_city = chosen_dest
+                updated["to_city"] = chosen_dest
+                
+                # RE-CALL AI to generate itinerary immediately
+                # Add the system message about the choice
+                history.append({
+                    "role": "system", 
+                    "content": f"SYSTEM UPDATE: The mystery destination selected is {chosen_dest}. Please now generate the full itinerary for this destination based on the user's preferences."
+                })
+                
+                # Call AI again
+                try:
+                    ai_raw = await call_openrouter(history)
+                    human_text_2, json_data_2 = split_ai_response(ai_raw)
+                    if human_text_2:
+                        human_text = human_text_2
+                    if json_data_2:
+                        json_data = json_data_2
+                        updated.update(json_data.get("updated_fields") or {})
+                except Exception:
+                    pass # Fallback to first response if second fails
+        # --------------------------
+
         for key, value in updated.items():
             if hasattr(trip, key) and value is not None:
                 setattr(trip, key, value)
@@ -300,8 +378,12 @@ def generate_packages(trip: models.Trip, budget_override: Optional[str] = None) 
         min_price = int(Decimal(base_per_person_per_day) * Decimal(people) * Decimal(days) * Decimal(p_min))
         max_price = int(Decimal(base_per_person_per_day) * Decimal(people) * Decimal(days) * Decimal(p_max))
 
+        # Generate deterministic ID based on trip_id and package name
+        pkg_id_str = f"{trip.id}-{name}"
+        pkg_id = hashlib.md5(pkg_id_str.encode()).hexdigest()
+
         packages.append({
-            "id": uuid.uuid4().hex,
+            "id": pkg_id,
             "name": f"{budget.title()} {name}",
             "description": f"{name} package. Includes {current_hotel}.",
             "min_price": max(1, min_price),
@@ -316,6 +398,21 @@ def list_packages(trip_id: str, budget: Optional[str] = None, db: Session = Depe
     trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
+
+    # Auto-fix missing fields if possible (common in group trips)
+    if not trip.duration_days:
+        if trip.start_date and trip.end_date:
+            delta = trip.end_date - trip.start_date
+            trip.duration_days = max(1, delta.days)
+        else:
+            trip.duration_days = 3 # Default fallback
+        db.add(trip)
+        db.commit()
+        
+    if not trip.party_type:
+        trip.party_type = "friends" # Default fallback
+        db.add(trip)
+        db.commit()
 
     if not (trip.duration_days and trip.party_type):
         raise HTTPException(status_code=400, detail="Trip must have duration_days and party_type to generate packages")

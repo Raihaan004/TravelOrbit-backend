@@ -29,6 +29,7 @@ Required trip fields:
 - interests: subset of [adventure, sightseeing, cultural, food, nightlife, relaxation]
 - special_requirements
 - start_date and end_date
+- mystery_preferences: { "location_type": "india" or "international", "theme": "adventure" or "nightlife" or "enjoyment" } (ONLY if user asks for a Mystery Trip)
  - Ask explicitly for number of members traveling (adults_count, children_count, seniors_count)
    when the information is missing — do not assume values.
 

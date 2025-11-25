@@ -6,6 +6,7 @@ Handles invoice, itinerary, and passenger details in professional HTML format
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 from typing import Optional, Dict, List, Any
 from datetime import datetime
 
@@ -449,6 +450,143 @@ class EmailService:
         """
         return footer_html
 
+    @staticmethod
+    def generate_ticket_html(trip: Trip, booking_number: str) -> str:
+        """Public method to generate ticket HTML for use in frontend/email"""
+        return EmailService._build_ticket_html(trip, booking_number)
+
+    @staticmethod
+    def _build_ticket_html(trip: Trip, booking_number: str) -> str:
+        """Build a realistic-looking fake ticket"""
+        import random
+        
+        # Determine Transport Mode
+        is_international = False
+        
+        # Check Mystery Preferences
+        if trip.is_mystery_trip and trip.mystery_preferences:
+            prefs = trip.mystery_preferences
+            if isinstance(prefs, dict):
+                loc_type = prefs.get("location_type", "").lower()
+                if "international" in loc_type or "outside" in loc_type:
+                    is_international = True
+        
+        # Check Destination (Heuristic)
+        if not is_international and trip.to_city:
+            # Common Indian cities to treat as Domestic
+            indian_cities = [
+                "goa", "mumbai", "delhi", "bangalore", "chennai", "kolkata", "jaipur", "udaipur", 
+                "agra", "varanasi", "pune", "hyderabad", "kochi", "munnar", "manali", "shimla", 
+                "rishikesh", "ladakh", "leh", "srinagar", "andaman", "port blair", "coorg", "ooty",
+                "pondicherry", "mysore", "amritsar", "jaisalmer"
+            ]
+            dest_lower = trip.to_city.lower()
+            # If it's NOT in the common Indian list, assume International (or Flight needed)
+            # This is a loose heuristic for the "fake" ticket
+            if not any(city in dest_lower for city in indian_cities):
+                is_international = True
+
+        # Setup Ticket Details
+        transport_mode = "FLIGHT" if is_international else "TRAIN"
+        if not is_international and random.choice([True, False]):
+             # Randomly assign Bus for some domestic trips if not specific
+             # But let's stick to Train/Flight for "Premium" feel unless it's short distance.
+             # Let's default Domestic to Flight for long distance, Train for others?
+             # For simplicity: International = Flight, Domestic = Flight (if luxury) or Train.
+             if trip.budget_level == "cheap":
+                 transport_mode = "BUS"
+             elif trip.budget_level == "moderate":
+                 transport_mode = "TRAIN"
+             else:
+                 transport_mode = "FLIGHT"
+        
+        # Force Flight for International
+        if is_international:
+            transport_mode = "FLIGHT"
+
+        # Generate Fake Details
+        carrier = "TravelOrbit Air" if transport_mode == "FLIGHT" else ("Indian Railways" if transport_mode == "TRAIN" else "Volvo AC Bus")
+        vehicle_number = f"{random.choice(['AI', '6E', 'UK'])}-{random.randint(100, 999)}" if transport_mode == "FLIGHT" else f"{random.randint(12000, 12999)}"
+        
+        from_loc = trip.from_city or "Origin City"
+        to_loc = trip.to_city or "Destination"
+        
+        dept_time = "10:00 AM"
+        arr_time = "02:00 PM"
+        
+        # Passengers
+        passengers_html = ""
+        if trip.passengers:
+            passengers_list = trip.passengers if isinstance(trip.passengers, list) else []
+            for p in passengers_list:
+                seat = f"{random.randint(1, 30)}{random.choice(['A', 'B', 'C', 'D', 'E', 'F'])}"
+                p_name = p.get("name", "Traveler")
+                passengers_html += f"""
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #ccc; padding: 5px 0;">
+                    <span>{p_name}</span>
+                    <span style="font-weight: bold;">Seat: {seat}</span>
+                </div>
+                """
+        else:
+             passengers_html = "<div>Guest Traveler</div>"
+
+        # Ticket HTML Template
+        ticket_html = f"""
+        <div class="container">
+            <h2>🎫 Your Travel Ticket ({transport_mode})</h2>
+            <div style="border: 2px dashed #667eea; background: #fff; padding: 0; border-radius: 10px; overflow: hidden; position: relative;">
+                
+                <!-- Header -->
+                <div style="background: #667eea; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-weight: bold; font-size: 18px;">{transport_mode} TICKET</div>
+                    <div style="font-family: monospace; font-size: 14px;">PNR: {booking_number}</div>
+                </div>
+                
+                <!-- Body -->
+                <div style="padding: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                        <div style="text-align: left;">
+                            <div style="font-size: 12px; color: #888;">FROM</div>
+                            <div style="font-size: 20px; font-weight: bold; color: #333;">{from_loc.upper()}</div>
+                            <div style="font-size: 14px; color: #555;">{dept_time}</div>
+                        </div>
+                        <div style="text-align: center; align-self: center;">
+                            <div style="font-size: 24px; color: #ccc;">✈</div>
+                            <div style="font-size: 10px; color: #999;">{vehicle_number}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 12px; color: #888;">TO</div>
+                            <div style="font-size: 20px; font-weight: bold; color: #333;">{to_loc.upper()}</div>
+                            <div style="font-size: 14px; color: #555;">{arr_time}</div>
+                        </div>
+                    </div>
+                    
+                    <div style="background: #f9f9f9; padding: 10px; border-radius: 5px;">
+                        <div style="font-size: 12px; color: #888; margin-bottom: 5px;">PASSENGERS</div>
+                        {passengers_html}
+                    </div>
+                    
+                    <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 12px; color: #888;">OPERATED BY</div>
+                            <div style="font-weight: 600; color: #667eea;">{carrier}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 12px; color: #888;">CLASS</div>
+                            <div style="font-weight: 600;">Economy</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Fake Barcode -->
+                <div style="background: #333; color: white; padding: 10px; text-align: center; font-family: monospace; letter-spacing: 4px;">
+                    ||| || ||| | |||| ||| || |||||
+                </div>
+            </div>
+        </div>
+        """
+        return ticket_html
+
     @classmethod
     def build_complete_email_html(
         cls,
@@ -475,6 +613,7 @@ class EmailService:
         """
         
         trip_summary = cls._build_trip_summary_html(trip, payment, booking_number)
+        ticket = cls._build_ticket_html(trip, booking_number)
         hotel_info = cls._build_hotel_info_html(trip)
         daily_itinerary = cls._build_daily_itinerary_html(trip)
         travelers = cls._build_travelers_html(trip)
@@ -484,6 +623,7 @@ class EmailService:
         complete_html = f"""
         {header}
         {trip_summary}
+        {ticket}
         {hotel_info}
         {daily_itinerary}
         {travelers}
@@ -500,10 +640,12 @@ class EmailService:
         to_email: str,
         subject: str,
         html_body: str,
-        text_body: Optional[str] = None
+        text_body: Optional[str] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None
     ) -> bool:
         """
-        Send email via SMTP with error handling
+        Send email via SMTP with error handling and attachment support
+        attachments: List of dicts with keys 'filename', 'content' (bytes), 'mime_type' (optional)
         Returns True if successful, False otherwise
         """
         
@@ -524,15 +666,32 @@ class EmailService:
         
         try:
             # Create multipart message
-            msg = MIMEMultipart("alternative")
+            msg = MIMEMultipart("mixed") if attachments else MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = settings.SENDER_EMAIL
             msg["To"] = to_email
             
-            # Attach text and HTML versions
-            if text_body:
-                msg.attach(MIMEText(text_body, "plain"))
-            msg.attach(MIMEText(html_body, "html"))
+            # Create the body part
+            if attachments:
+                body_part = MIMEMultipart("alternative")
+                if text_body:
+                    body_part.attach(MIMEText(text_body, "plain"))
+                body_part.attach(MIMEText(html_body, "html"))
+                msg.attach(body_part)
+            else:
+                if text_body:
+                    msg.attach(MIMEText(text_body, "plain"))
+                msg.attach(MIMEText(html_body, "html"))
+            
+            # Attach files
+            if attachments:
+                for attachment in attachments:
+                    filename = attachment.get("filename", "attachment")
+                    content = attachment.get("content")
+                    if content:
+                        part = MIMEApplication(content, Name=filename)
+                        part['Content-Disposition'] = f'attachment; filename="{filename}"'
+                        msg.attach(part)
             
             # Send via SMTP
             with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
@@ -593,10 +752,67 @@ class EmailService:
         except Exception as e:
             return ""
 
+    @staticmethod
+    def _build_feedback_email_html(trip: Trip) -> str:
+        """Build feedback request email HTML"""
+        feedback_link = f"http://localhost:5500/feedback.html?trip_id={trip.id}"
+        
+        feedback_html = f"""
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            {EmailService.EMAIL_STYLES}
+        </head>
+        <body>
+        <div class="container">
+            <div class="header">
+                <h1>👋 Welcome Back!</h1>
+                <p>We hope you had an amazing trip!</p>
+            </div>
+            
+            <div class="container">
+                <h2>How was your trip to {trip.to_city}?</h2>
+                <p>We'd love to hear about your experience. Your feedback helps us improve and help other travelers plan their perfect trips.</p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{feedback_link}" class="media-link" style="padding: 15px 30px; font-size: 16px;">Rate Your Trip</a>
+                </div>
+                
+                <p>It only takes a minute!</p>
+            </div>
+            
+            {EmailService._build_footer_html()}
+        </div>
+        </body>
+        </html>
+        """
+        return feedback_html
+
+    @staticmethod
+    def send_feedback_request_email(trip: Trip) -> bool:
+        """Send feedback request email"""
+        html_body = EmailService._build_feedback_email_html(trip)
+        subject = f"Welcome back! How was your trip to {trip.to_city}?"
+        return EmailService.send_email(trip.email, subject, html_body)
+
 
 # Convenience functions for backwards compatibility
 def send_booking_email(trip: Trip, payment: Payment, booking_number: str, to_email: str) -> bool:
-    """Send complete booking confirmation email"""
+    """Send complete booking confirmation email with PDF itinerary"""
+    from app.pdf_service import PDFService
+    
     html_body = EmailService.build_complete_email_html(trip, payment, booking_number)
     subject = f"Your TravelOrbit Booking Confirmed - Booking No: {booking_number}"
-    return EmailService.send_email(to_email, subject, html_body)
+    
+    # Generate PDF
+    pdf_bytes = PDFService.generate_itinerary_pdf(trip, payment, booking_number)
+    attachments = []
+    if pdf_bytes:
+        attachments.append({
+            "filename": f"Itinerary_{booking_number}.pdf",
+            "content": pdf_bytes,
+            "mime_type": "application/pdf"
+        })
+    
+    return EmailService.send_email(to_email, subject, html_body, attachments=attachments)

@@ -16,17 +16,28 @@ const ChatState = {
     AUTH_NAME: 'AUTH_NAME',
     AUTH_PHONE_OTP: 'AUTH_PHONE_OTP',
     PASSENGER_COUNT: 'PASSENGER_COUNT',
-    PASSENGER_DETAILS: 'PASSENGER_DETAILS'
+    PASSENGER_DETAILS: 'PASSENGER_DETAILS',
+    ASK_FROM_CITY: 'ASK_FROM_CITY', // New state
+    // Group Plan States
+    GROUP_ASK_TYPE: 'GROUP_ASK_TYPE',
+    GROUP_ASK_NAME: 'GROUP_ASK_NAME',
+    GROUP_ASK_SOURCE: 'GROUP_ASK_SOURCE',
+    GROUP_ASK_COUNT: 'GROUP_ASK_COUNT',
+    GROUP_ASK_OPTIONS: 'GROUP_ASK_OPTIONS'
 };
 
 let chatState = ChatState.IDLE;
-let pendingAuthAction = null; // { type: 'DEAL' | 'PLAN', data: ... }
+let pendingAuthAction = null; // { type: 'DEAL' | 'PLAN' | 'GROUP_PLAN', data: ... }
 let tempAuthEmail = null;
 let tempAuthPhone = null;
 let tempAuthName = null;
 let tempGoogleId = null;
 let tempPassengerCount = 0;
 let tempPassengers = [];
+let tempGroupName = null;
+let tempGroupCount = 0;
+let tempGroupSource = null;
+let tempGroupOptions = [];
 
 // ---------- Load Deals & Auto-Start Session ----------
 window.addEventListener('load', async function() {
@@ -111,6 +122,24 @@ async function handleUserAction() {
         case ChatState.PASSENGER_DETAILS:
             await handlePassengerDetailsInput(message);
             break;
+        case ChatState.ASK_FROM_CITY:
+            await handleFromCityInput(message);
+            break;
+        case ChatState.GROUP_ASK_TYPE:
+            await handleGroupTypeInput(message);
+            break;
+        case ChatState.GROUP_ASK_NAME:
+            await handleGroupNameInput(message);
+            break;
+        case ChatState.GROUP_ASK_SOURCE:
+            await handleGroupSourceInput(message);
+            break;
+        case ChatState.GROUP_ASK_COUNT:
+            await handleGroupCountInput(message);
+            break;
+        case ChatState.GROUP_ASK_OPTIONS:
+            await handleGroupOptionsInput(message);
+            break;
         case ChatState.IDLE:
         default:
             await sendChatMessage(message);
@@ -153,6 +182,42 @@ async function sendChatMessage(message) {
         }
     } catch (e) {
         addAIMessage("❌ Error: " + e.message);
+    }
+}
+
+// ---------- Mystery Trip ----------
+async function startMysteryTrip() {
+    // Reset UI
+    document.getElementById("chatBox").innerHTML = "";
+    document.getElementById("itinerary").classList.add("hidden");
+    document.getElementById("packagesArea").classList.add("hidden");
+    document.getElementById("paymentArea").classList.add("hidden");
+    
+    try {
+        const res = await fetch(`${BASE_URL}/trip-plan/session/start`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+                register_id: registerId, 
+                email: email,
+                is_mystery_trip: true 
+            })
+        });
+
+        const data = await res.json();
+        tripId = data.trip_id;
+        console.log("Mystery Session started:", tripId);
+
+        // Initial greeting for Mystery Trip
+        addAIMessage("🎲 **Welcome to the Mystery Trip Planner!** 🎲");
+        addAIMessage("I'll pick a surprise destination for you based on your mood. Let's get started!");
+        
+        // Send hidden message to trigger AI questions
+        await sendChatMessage("I want to plan a mystery trip. Please ask me about my preferences (India/International, Duration, Theme).");
+        
+    } catch (e) {
+        console.error("Failed to start session:", e);
+        addAIMessage("⚠️ Connection error. Please refresh the page.");
     }
 }
 
@@ -434,7 +499,11 @@ function completeLogin(userData) {
     addAIMessage(`🎉 Login successful! Welcome, ${user.name}.`);
     
     // Proceed to next step
-    startPassengerCollection();
+    if (pendingAuthAction && pendingAuthAction.type === 'GROUP_PLAN') {
+        startGroupPlan();
+    } else {
+        startPassengerCollection();
+    }
 }
 
 // ---------- Passenger Collection Flow ----------
@@ -477,17 +546,32 @@ async function handlePassengerDetailsInput(input) {
         addAIMessage(`✅ Saved. Please provide details for **Passenger ${nextNum}**.`);
     } else {
         // All collected
-        chatState = ChatState.IDLE;
         addAIMessage("✅ All passenger details saved!");
         
         // Execute Pending Action
         if (pendingAuthAction && pendingAuthAction.type === 'DEAL') {
-            await finalizeDealBooking(pendingAuthAction.data);
+            // Ask for From City before finalizing
+            chatState = ChatState.ASK_FROM_CITY;
+            addAIMessage("🏙️ Where are you traveling from? (e.g., Mumbai, Delhi)");
         } else {
             // Normal Plan
+            chatState = ChatState.IDLE;
             await savePassengersAndProceed();
         }
     }
+}
+
+async function handleFromCityInput(city) {
+    if (city.length < 2) {
+        addAIMessage("⚠️ Please enter a valid city name.");
+        return;
+    }
+    
+    const dealData = pendingAuthAction.data;
+    dealData.from_city = city; // Add from_city to deal data
+    
+    chatState = ChatState.IDLE;
+    await finalizeDealBooking(dealData);
 }
 
 // ---------- Finalize Normal Plan ----------
@@ -528,7 +612,7 @@ async function finalizeDealBooking(dealData) {
                 passenger_name: primary.name,
                 contact_phone: primary.phone,
                 passenger_age: primary.age,
-                from_city: "User City", // Could ask this too
+                from_city: dealData.from_city || "User City", // Use collected city
                 passengers: tempPassengers
             })
         });
@@ -808,6 +892,15 @@ async function handlePayment() {
                     if (verifyResponse.ok) {
                         paymentMsg.innerHTML = `<p style="color:green">✔ Payment Successful! Booking: ${verifyData.booking_number}</p>`;
                         addAIMessage("🎉 Payment received! Your booking is confirmed.");
+                        
+                        // Show Ticket if available
+                        if (verifyData.ticket_html) {
+                            const ticketDiv = document.createElement("div");
+                            ticketDiv.innerHTML = verifyData.ticket_html;
+                            document.getElementById("chatBox").appendChild(ticketDiv);
+                            document.getElementById("chatBox").scrollTop = document.getElementById("chatBox").scrollHeight;
+                        }
+
                         showFeedbackForm();
                     } else {
                         throw new Error(verifyData.detail || "Verification failed");
@@ -847,4 +940,163 @@ async function sendFeedback() {
 // ---------- Test Payment Flow (Legacy) ----------
 async function testPaymentFlow() {
     alert("Test mode is deprecated in this version.");
+}
+
+// ---------- Group Plan ----------
+function startGroupPlan() {
+    // Check Auth
+    const user = localStorage.getItem("user");
+    if (!user) {
+        initiateBookingFlow('GROUP_PLAN'); // Reuse auth flow
+        return;
+    }
+    
+    // If auth, start flow
+    chatState = ChatState.GROUP_ASK_TYPE;
+    addAIMessage("Are you planning alone or with friends?");
+}
+
+async function handleGroupTypeInput(message) {
+    if (message.toLowerCase().includes("alone")) {
+        addAIMessage("Okay, let's plan a solo trip!");
+        chatState = ChatState.IDLE;
+        // Redirect to normal flow or just let them chat
+        await sendChatMessage("I want to plan a solo trip.");
+    } else {
+        chatState = ChatState.GROUP_ASK_NAME;
+        addAIMessage("Exciting! What should we call this group trip?");
+    }
+}
+
+async function handleGroupNameInput(message) {
+    tempGroupName = message;
+    chatState = ChatState.GROUP_ASK_SOURCE;
+    addAIMessage(`"${tempGroupName}" sounds great! Where are you traveling from? (Source Place)`);
+}
+
+async function handleGroupSourceInput(message) {
+    tempGroupSource = message;
+    chatState = ChatState.GROUP_ASK_COUNT;
+    addAIMessage(`Okay, traveling from ${tempGroupSource}. How many people are in the group (including you)?`);
+}
+
+async function handleGroupCountInput(message) {
+    const count = parseInt(message);
+    if (isNaN(count) || count < 2) {
+        addAIMessage("Please enter a valid number (at least 2 for a group).");
+        return;
+    }
+    tempGroupCount = count;
+    chatState = ChatState.GROUP_ASK_OPTIONS;
+    addAIMessage(`Got it, ${count} people. Now, please list **4 destination options** for the poll (comma separated).`);
+    addAIMessage("Example: Bali, Goa, Paris, Dubai");
+}
+
+async function handleGroupOptionsInput(message) {
+    const options = message.split(",").map(e => e.trim()).filter(e => e.length > 0);
+    if (options.length < 2) {
+        addAIMessage("Please provide at least 2 options for the poll.");
+        return;
+    }
+    
+    tempGroupOptions = options;
+    addAIMessage("Creating your group poll...");
+    
+    try {
+        const res = await fetch(`${BASE_URL}/groups/create`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                leader_id: registerId,
+                leader_email: email,
+                group_name: tempGroupName,
+                from_city: tempGroupSource,
+                expected_count: tempGroupCount,
+                destination_options: tempGroupOptions,
+                members: [] // No initial members list required now
+            })
+        });
+        
+        const data = await res.json();
+        
+        addAIMessage(data.message);
+        
+        // Create shareable link HTML
+        const linkHtml = `
+            <div style="background: #f8f9fa; padding: 10px; border-radius: 5px; margin-top: 10px; border: 1px solid #ddd;">
+                <p style="margin: 0 0 5px 0; font-weight: bold;">Share this link:</p>
+                <a href="${data.shareable_link}" target="_blank" style="word-break: break-all;">${data.shareable_link}</a>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <button onclick="navigator.clipboard.writeText('${data.shareable_link}').then(() => alert('Link copied!'))" style="background: #6c757d; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 0.9em;">📋 Copy</button>
+                    <button onclick="window.open('https://wa.me/?text=Vote%20for%20our%20trip!%20${encodeURIComponent(data.shareable_link)}', '_blank')" style="background: #25D366; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 0.9em;">📱 WhatsApp</button>
+                </div>
+            </div>
+        `;
+        
+        addAIMessage(linkHtml);
+        
+        chatState = ChatState.IDLE;
+        
+        // Add button to check results
+        const chatBox = document.getElementById("chatBox");
+        const btnDiv = document.createElement("div");
+        btnDiv.className = "chat-action-buttons";
+        btnDiv.innerHTML = `<button onclick="checkGroupResult('${data.group_id}')" style="background:#17a2b8; color:white; border:none; padding:8px 15px; border-radius:15px; cursor:pointer; margin-top:5px;">Show Group Result 📊</button>`;
+        chatBox.appendChild(btnDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        
+    } catch (e) {
+        addAIMessage("❌ Error creating group: " + e.message);
+    }
+}
+
+async function checkGroupResult(groupId) {
+    addAIMessage("🔍 Fetching group results...");
+    try {
+        const res = await fetch(`${BASE_URL}/groups/${groupId}/result`);
+        const data = await res.json();
+        
+        let msg = `🎉 **Final Group Results**\n`;
+        msg += `Destination: **${data.most_voted_destination || "Pending"}**\n`;
+        msg += `Budget: **${data.most_voted_budget || "Pending"}**\n`;
+        msg += `Dates: **${data.most_voted_dates || "Pending"}**\n`;
+        msg += `Activities: **${data.most_voted_activities.join(", ") || "Pending"}**\n\n`;
+        msg += `Total Votes: ${data.total_votes}\n`;
+        
+        addAIMessage(msg);
+        
+        if (data.most_voted_destination) {
+            addAIMessage("Shall I create a full trip itinerary for your group?");
+            
+            const chatBox = document.getElementById("chatBox");
+            const btnDiv = document.createElement("div");
+            btnDiv.className = "chat-action-buttons";
+            btnDiv.innerHTML = `<button onclick="convertGroupToTrip('${groupId}')" style="background:#28a745; color:white; border:none; padding:8px 15px; border-radius:15px; cursor:pointer; margin-top:5px;">Yes, Create Itinerary 🚀</button>`;
+            chatBox.appendChild(btnDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+    } catch (e) {
+        addAIMessage("❌ Error fetching results.");
+    }
+}
+
+async function convertGroupToTrip(groupId) {
+    addAIMessage("Generating itinerary based on group votes...");
+    try {
+        const res = await fetch(`${BASE_URL}/groups/${groupId}/convert-to-trip`, {
+            method: "POST"
+        });
+        const data = await res.json();
+        
+        if (data.trip_id) {
+            tripId = data.trip_id;
+            addAIMessage("✅ Itinerary generated! Loading details...");
+            await sendChatMessage("Show me the itinerary.");
+        } else {
+            addAIMessage("❌ Failed to create trip.");
+        }
+    } catch (e) {
+        addAIMessage("❌ Error: " + e.message);
+    }
 }

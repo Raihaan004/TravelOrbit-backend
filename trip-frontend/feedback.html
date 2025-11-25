@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trip Feedback - TravelOrbit</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .feedback-container {
+            width: 100%;
+            max-width: 500px;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        .rating-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .rating-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid #ddd;
+            background: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .rating-btn.selected {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .hidden {
+            display: none;
+        }
+        .success-message {
+            text-align: center;
+            color: #2e7d32;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="feedback-container" id="feedbackForm">
+        <h1 style="margin-top: 0; color: #333;">Trip Feedback</h1>
+        <p style="text-align: center; color: #666;">How was your trip?</p>
+        
+        <div class="rating-group">
+            <button class="rating-btn" onclick="selectRating(1)">1</button>
+            <button class="rating-btn" onclick="selectRating(2)">2</button>
+            <button class="rating-btn" onclick="selectRating(3)">3</button>
+            <button class="rating-btn" onclick="selectRating(4)">4</button>
+            <button class="rating-btn" onclick="selectRating(5)">5</button>
+        </div>
+        
+        <div class="form-group">
+            <label for="comments">Comments (Optional)</label>
+            <textarea id="comments" rows="4" placeholder="Tell us about your experience..."></textarea>
+        </div>
+        
+        <button onclick="submitFeedback()" class="btn-primary" style="width: 100%;">Submit Feedback</button>
+        <p id="errorMsg" style="color: red; text-align: center; margin-top: 10px;"></p>
+    </div>
+
+    <div class="feedback-container hidden" id="successView">
+        <div class="success-message">
+            <h2 style="color: #2e7d32;">Thank You!</h2>
+            <p>Your feedback has been submitted successfully.</p>
+            <p>We appreciate your input!</p>
+        </div>
+    </div>
+
+    <script>
+        let selectedRating = 0;
+        const API_BASE = "http://localhost:8000"; // Adjust if needed
+
+        // Get trip_id from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const tripId = urlParams.get('trip_id');
+
+        if (!tripId) {
+            document.getElementById('feedbackForm').innerHTML = '<p style="text-align:center; color:red;">Invalid link. Trip ID missing.</p>';
+        }
+
+        function selectRating(rating) {
+            selectedRating = rating;
+            document.querySelectorAll('.rating-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                if (parseInt(btn.innerText) === rating) {
+                    btn.classList.add('selected');
+                }
+            });
+        }
+
+        async function submitFeedback() {
+            if (selectedRating === 0) {
+                document.getElementById('errorMsg').innerText = "Please select a rating.";
+                return;
+            }
+
+            const comments = document.getElementById('comments').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/trip-plan/${tripId}/feedback`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        rating: selectedRating,
+                        comments: comments
+                    })
+                });
+
+                if (response.ok) {
+                    document.getElementById('feedbackForm').classList.add('hidden');
+                    document.getElementById('successView').classList.remove('hidden');
+                } else {
+                    const data = await response.json();
+                    document.getElementById('errorMsg').innerText = data.detail || "Failed to submit feedback.";
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('errorMsg').innerText = "Network error. Please try again.";
+            }
+        }
+    </script>
+</body>
+</html>

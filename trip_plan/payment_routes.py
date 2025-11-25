@@ -10,7 +10,7 @@ from app.database import get_db
 from trip_plan.models import Trip, Payment
 from app.payments.utils import calculate_price_for_trip, generate_booking_number
 from app.payments.razorpay_service import get_razorpay_service
-from app.email_service import send_booking_email
+from app.email_service import send_booking_email, EmailService # Added EmailService
 from app.whatsapp_service import send_trip_confirmation_whatsapp
 from auth.app.auth.calendar_service import create_calendar_event
 from auth.app.database import get_db as get_auth_db
@@ -204,10 +204,14 @@ async def verify_payment(
             except Exception as e:
                 logger.warning(f"WhatsApp sending failed: {e}")
 
+        # Generate Ticket HTML for Frontend
+        ticket_html = EmailService.generate_ticket_html(trip, booking_number)
+
         return {
             "status": "success",
             "booking_number": booking_number,
-            "trip_id": trip.id
+            "trip_id": trip.id,
+            "ticket_html": ticket_html
         }
 
     except HTTPException:

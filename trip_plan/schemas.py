@@ -14,6 +14,7 @@ class TripSessionStartRequest(BaseModel):
     contact_phone: Optional[str] = None
     # Optional freeform user reply when continuing the conversational flow
     message: Optional[str] = None
+    is_mystery_trip: Optional[bool] = False
 
 
 # ----- Deal Start Request (simplified, collected via form) -----
@@ -138,6 +139,8 @@ class TripDetail(BaseModel):
     ai_summary_json: Optional[Any]
     passengers: Optional[Any]
     contact_phone: Optional[str]
+    is_mystery_trip: Optional[int] = 0
+    mystery_preferences: Optional[Any] = None
 
     class Config:
         from_attributes = True
@@ -206,3 +209,56 @@ class DealOfDayListResponse(BaseModel):
     deals: List[DealOfDayResponse]
     count: int
     message: str
+
+
+# ----- Group Planning -----
+class GroupCreateRequest(BaseModel):
+    leader_id: str
+    leader_email: EmailStr
+    group_name: str
+    members: Optional[List[EmailStr]] = []  # Made optional
+    from_city: Optional[str] = None
+    expected_count: Optional[int] = None
+    destination_options: Optional[List[str]] = None  # The 4 poll options
+
+
+class GroupCreateResponse(BaseModel):
+    group_id: str
+    shareable_link: str
+    message: str
+
+
+class GroupVoteRequest(BaseModel):
+    voter_email: EmailStr
+    voter_name: Optional[str] = None
+    voter_phone: Optional[str] = None
+    destination: Optional[str] = None
+    budget: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    activities: Optional[List[str]] = None
+
+
+class GroupVoteResponse(BaseModel):
+    message: str
+    vote_id: str
+
+
+class GroupResultResponse(BaseModel):
+    group_id: str
+    group_name: str
+    most_voted_destination: Optional[str]
+    most_voted_budget: Optional[str]
+    most_voted_dates: Optional[str]  # e.g. "2023-12-15 to 2023-12-20"
+    most_voted_activities: List[str]
+    total_votes: int
+    message: str
+
+
+class GroupDetailResponse(BaseModel):
+    group_id: str
+    name: str
+    leader_id: str
+    members: List[dict]  # {email, status}
+    votes: List[dict]  # simplified vote info
+    destination_options: Optional[List[str]] = None

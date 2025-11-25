@@ -11,3 +11,4 @@ httpx         # <--- NEW for OpenRouter
 twilio
 stripe
 razorpay
+xhtml2pdf

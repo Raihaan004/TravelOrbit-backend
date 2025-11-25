@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Trip Voting - TravelOrbit</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .voting-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .checkbox-group label {
+            font-weight: normal;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #f0f0f0;
+            padding: 5px 10px;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #message {
+            margin-top: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="voting-container">
+        <h2 id="group-name">Loading Group...</h2>
+        <p>Cast your vote for the upcoming trip!</p>
+        
+        <form id="voting-form">
+            <div class="form-group">
+                <label for="name">Your Name</label>
+                <input type="text" id="name" required placeholder="Enter your name">
+            </div>
+
+            <div class="form-group">
+                <label for="email">Your Email</label>
+                <input type="email" id="email" required placeholder="Enter your email">
+            </div>
+
+            <div class="form-group">
+                <label for="phone">Your Phone Number</label>
+                <input type="tel" id="phone" required placeholder="Enter your phone number">
+            </div>
+
+            <div class="form-group" id="destination-options-container">
+                <label>Vote for Destination</label>
+                <div id="destination-options" class="checkbox-group" style="flex-direction: column; align-items: flex-start;">
+                    <!-- Options will be injected here -->
+                    <p>Loading options...</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="budget">Budget Range</label>
+                <select id="budget">
+                    <option value="Cheap">Cheap (Budget-friendly)</option>
+                    <option value="Moderate">Moderate (Standard)</option>
+                    <option value="Luxury">Luxury (High-end)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Preferred Dates</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="date" id="start-date">
+                    <input type="date" id="end-date">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Activities (Select multiple)</label>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" name="activity" value="Beach"> Beach</label>
+                    <label><input type="checkbox" name="activity" value="Hiking"> Hiking</label>
+                    <label><input type="checkbox" name="activity" value="Nightlife"> Nightlife</label>
+                    <label><input type="checkbox" name="activity" value="Culture"> Culture</label>
+                    <label><input type="checkbox" name="activity" value="Food"> Food Tours</label>
+                    <label><input type="checkbox" name="activity" value="Adventure"> Adventure Sports</label>
+                    <label><input type="checkbox" name="activity" value="Relaxation"> Relaxation</label>
+                </div>
+            </div>
+
+            <button type="submit">Submit Vote</button>
+        </form>
+
+        <div id="message"></div>
+    </div>
+
+    <script src="/static/vote.js"></script>
+</body>
+</html>

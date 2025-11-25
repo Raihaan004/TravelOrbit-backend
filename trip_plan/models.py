@@ -52,8 +52,15 @@ class Trip(Base):
     # Deal booking flag
     is_deal_booking = Column(Integer, default=0)  # 1 = from deal, 0 = regular planning
 
+    # Mystery Trip
+    is_mystery_trip = Column(Integer, default=0) # 1 = mystery trip
+    mystery_preferences = Column(JSONB, nullable=True) # { "location_type": "india", "theme": "adventure" }
+
     # Calendar sync
     google_calendar_event_id = Column(String, nullable=True)
+
+    # Feedback
+    feedback_email_sent = Column(Integer, default=0)  # 0 = not sent, 1 = sent
 
     status = Column(String, default="draft")  # draft, planned, paid, cancelled
     total_price = Column(Numeric, nullable=True)
@@ -151,3 +158,57 @@ class DealOfDay(Base):
     is_international = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# ---------- GROUP PLANNING ----------
+class Group(Base):
+    __tablename__ = "groups"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    short_code = Column(String, unique=True, index=True, nullable=True) # For shareable links
+    leader_id = Column(String, nullable=False)  # register_id of the leader
+    name = Column(String, nullable=False)
+    
+    # New fields for poll-based planning
+    from_city = Column(String, nullable=True)
+    expected_count = Column(Integer, nullable=True)
+    destination_options = Column(JSONB, nullable=True)  # List of strings e.g. ["Bali", "Paris", "Goa", "Dubai"]
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    members = relationship("GroupMember", back_populates="group", cascade="all, delete-orphan")
+    votes = relationship("GroupVote", back_populates="group", cascade="all, delete-orphan")
+
+
+class GroupMember(Base):
+    __tablename__ = "group_members"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    group_id = Column(String, ForeignKey("groups.id"), nullable=False)
+    email = Column(String, nullable=False)
+    status = Column(String, default="invited")  # invited, joined
+
+    group = relationship("Group", back_populates="members")
+
+
+class GroupVote(Base):
+    __tablename__ = "group_votes"
+
+    id = Column(String, primary_key=True, default=lambda: uuid.uuid4().hex)
+    group_id = Column(String, ForeignKey("groups.id"), nullable=False)
+    voter_email = Column(String, nullable=False)
+    voter_name = Column(String, nullable=True)
+    voter_phone = Column(String, nullable=True)
+    
+    destination = Column(String, nullable=True)
+    budget = Column(String, nullable=True)
+    
+    # Dates can be stored as strings or dates. Storing as strings for flexibility in voting or dates if strict.
+    # User prompt says "Preferred dates".
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    
+    activities = Column(JSONB, nullable=True)  # list of strings
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    group = relationship("Group", back_populates="votes")
