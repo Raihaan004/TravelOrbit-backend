@@ -836,8 +836,77 @@ async function selectPackage(packageId) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ register_id: registerId, email, members_count: tempPassengerCount || 1 })
     });
-    addAIMessage("Package Selected — Proceed to Payment 💳");
-    showPayment();
+    addAIMessage("Package Selected! One last thing...");
+    await showAddonsSelection();
+}
+
+async function showAddonsSelection() {
+    const box = document.getElementById("addonsArea");
+    
+    try {
+        // Fetch trip details to get duration for accurate cost calculation
+        const res = await fetch(`${BASE_URL}/trip-plan/${tripId}`);
+        const trip = await res.json();
+        const days = trip.duration_days || 1;
+        const totalAddonCost = 2000 * days;
+
+        box.innerHTML = `
+            <h2 style="color: #333;">📸 Enhance Your Trip?</h2>
+            <p style="font-size: 1.1em; color: #555;">Would you like to add a <strong>Travel Guide & Photographer</strong>?</p>
+            <p style="color: #007bff; font-weight: bold;">+ ₹2,000 / day x ${days} days = ₹${totalAddonCost.toLocaleString()}</p>
+            <div style="margin-top: 20px;">
+                <button onclick="confirmAddons(true)" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px; font-size: 1em;">Yes, Add it! ✅</button>
+                <button onclick="confirmAddons(false)" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 1em;">No, thanks ❌</button>
+            </div>
+        `;
+    } catch (e) {
+        console.error("Error fetching trip details:", e);
+        // Fallback to generic text if fetch fails
+        box.innerHTML = `
+            <h2 style="color: #333;">📸 Enhance Your Trip?</h2>
+            <p style="font-size: 1.1em; color: #555;">Would you like to add a <strong>Travel Guide & Photographer</strong>?</p>
+            <p style="color: #007bff; font-weight: bold;">+ ₹2,000 / day</p>
+            <div style="margin-top: 20px;">
+                <button onclick="confirmAddons(true)" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px; font-size: 1em;">Yes, Add it! ✅</button>
+                <button onclick="confirmAddons(false)" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 1em;">No, thanks ❌</button>
+            </div>
+        `;
+    }
+
+    box.classList.remove("hidden");
+    box.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function confirmAddons(includeGuide) {
+    // Hide addons area
+    document.getElementById("addonsArea").classList.add("hidden");
+    
+    if (includeGuide) {
+        addAIMessage("✅ Added Travel Guide & Photographer to your package.");
+    } else {
+        addAIMessage("❌ Skipped Travel Guide.");
+    }
+
+    try {
+        const res = await fetch(`${BASE_URL}/trip-plan/${tripId}/addons`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                register_id: registerId,
+                email: email,
+                include_guide_photographer: includeGuide
+            })
+        });
+        
+        const data = await res.json();
+        addAIMessage(`💰 Updated Total Price: ₹${data.total_price.toLocaleString()}`);
+        
+        showPayment();
+        
+    } catch (e) {
+        addAIMessage("⚠️ Error updating add-ons, but proceeding to payment.");
+        showPayment();
+    }
 }
 
 function showPayment() {
@@ -867,6 +936,44 @@ async function handlePayment() {
 
         const orderData = await response.json();
         if (!response.ok) throw new Error(orderData.detail || "Failed to create order");
+
+        // Check for Mock Payment Mode
+        if (orderData.payment_mode === "mock") {
+            paymentMsg.innerHTML = "Processing mock payment...";
+            // Simulate delay
+            setTimeout(async () => {
+                try {
+                    const verifyResponse = await fetch(`${BASE_URL}/trips/${cleanTripId}/payment/verify`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            trip_id: cleanTripId,
+                            razorpay_order_id: orderData.order_id,
+                            razorpay_payment_id: "pay_mock_" + Math.random().toString(36).substr(2, 9),
+                            razorpay_signature: "mock_signature"
+                        })
+                    });
+                    const verifyData = await verifyResponse.json();
+                    if (verifyResponse.ok) {
+                        paymentMsg.innerHTML = `<p style="color:green">✔ Payment Successful! Booking: ${verifyData.booking_number}</p>`;
+                        addAIMessage("🎉 Payment received! Your booking is confirmed.");
+                        
+                        if (verifyData.ticket_html) {
+                            const ticketDiv = document.createElement("div");
+                            ticketDiv.innerHTML = verifyData.ticket_html;
+                            document.getElementById("chatBox").appendChild(ticketDiv);
+                            document.getElementById("chatBox").scrollTop = document.getElementById("chatBox").scrollHeight;
+                        }
+                        showFeedbackForm();
+                    } else {
+                        throw new Error(verifyData.detail || "Verification failed");
+                    }
+                } catch (err) {
+                    paymentMsg.innerHTML = `<p class="error">❌ Verification Error: ${err.message}</p>`;
+                }
+            }, 1500);
+            return;
+        }
 
         const options = {
             "key": orderData.key_id,

@@ -41,6 +41,12 @@ def calculate_price_for_trip(trip: Trip) -> tuple[Decimal, str]:
 
     days = trip.duration_days or 1
     total_amount = Decimal(base_per_person_per_day) * total_people * days * budget_multiplier
+
+    # Add guide cost if selected
+    if getattr(trip, "include_guide_photographer", 0) == 1:
+        guide_cost = Decimal(2000) * days
+        total_amount += guide_cost
+
     total_amount = total_amount.quantize(Decimal("1."))  # round to whole rupee
 
     return total_amount, "INR"

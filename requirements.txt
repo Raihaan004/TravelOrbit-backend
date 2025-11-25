@@ -12,3 +12,5 @@ twilio
 stripe
 razorpay
 xhtml2pdf
+reportlab
+Pillow

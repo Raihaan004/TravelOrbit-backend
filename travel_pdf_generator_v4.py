@@ -14,6 +14,10 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT, TA_JUSTIFY
 from PIL import Image as PILImage, ImageDraw, ImageFont, ImageEnhance
 
+from reportlab.graphics.barcode import code128
+from reportlab.graphics.shapes import Drawing
+from reportlab.lib.colors import HexColor
+
 # Color Palette - Bright, Colorful, Magazine Style
 COLORS = {
     'primary_gradient_1': colors.HexColor('#FF6B6B'),
@@ -27,12 +31,15 @@ COLORS = {
     'dark_text': colors.HexColor('#2C3E50'),
     'light_text': colors.white,
     'aqua_gradient': colors.HexColor('#00E5E5'),
+    'ticket_bg': colors.HexColor('#F8F9FA'),
+    'ticket_border': colors.HexColor('#E9ECEF'),
 }
 
 class TravelPDFGenerator:
     def __init__(self):
         self.page_width, self.page_height = A4
         self.image_cache = {}
+        self.styles = getSampleStyleSheet()
         
     def fetch_image_from_unsplash(self, query, width=800, height=600):
         """Fetch high-quality images from Unsplash"""
@@ -80,7 +87,7 @@ class TravelPDFGenerator:
             
             # Add text
             try:
-                font = ImageFont.truetype("arial.ttf", 80)
+                font = ImageFont.truetype("arial.ttf", 60)
             except:
                 font = ImageFont.load_default()
             
@@ -95,22 +102,22 @@ class TravelPDFGenerator:
         except:
             return PILImage.new('RGB', (width, height), color='#FF6B6B')
     
-    def get_image(self, destination, query_override=None):
+    def get_image(self, destination, query_override=None, width=800, height=600):
         """Get image for destination"""
-        cache_key = destination.lower()
+        cache_key = f"{destination}_{query_override}_{width}_{height}".lower()
         
         if cache_key in self.image_cache:
             return self.image_cache[cache_key]
         
         query = query_override or f"{destination} travel destination scenic landscape"
         
-        img = self.fetch_image_from_unsplash(query, 1000, 700)
+        img = self.fetch_image_from_unsplash(query, width, height)
         if img:
             img = self.enhance_image_colors(img)
         else:
             # Fallback to gradient
             gradient = [(255, 107, 107), (78, 205, 196)]
-            img = self.create_gradient_placeholder(1000, 700, destination, gradient)
+            img = self.create_gradient_placeholder(width, height, destination, gradient)
         
         self.image_cache[cache_key] = img
         return img
@@ -123,755 +130,324 @@ class TravelPDFGenerator:
         return img_bytes
     
     def create_pdf(self, trip_data, output_path="travel_itinerary.pdf"):
-        """Generate complete magazine-style PDF"""
+        """Generate complete magazine-style PDF in 2 pages with optimized layout and fake ticket"""
         doc = SimpleDocTemplate(
             output_path,
             pagesize=A4,
-            topMargin=0.3*inch,
-            bottomMargin=0.3*inch,
-            leftMargin=0.4*inch,
-            rightMargin=0.4*inch
+            topMargin=0.2*inch,
+            bottomMargin=0.2*inch,
+            leftMargin=0.3*inch,
+            rightMargin=0.3*inch
         )
         
         story = []
         
-        # PAGE 1: COVER
-        story.extend(self.create_cover_page(trip_data))
+        # --- PAGE 1 ---
+        # 1. Cover Section (Top 30%)
+        story.append(self.create_cover_section(trip_data))
+        story.append(Spacer(1, 0.1*inch))
+        
+        # 2. Summary Section (Compact)
+        story.append(self.create_summary_section(trip_data))
+        story.append(Spacer(1, 0.15*inch))
+
+        # 3. Fake Ticket (Boarding Pass) - Visual Highlight
+        story.append(self.create_boarding_pass(trip_data))
+        story.append(Spacer(1, 0.15*inch))
+        
+        # 4. Day by Day (Bottom 40% - Days 1-3)
+        story.append(self.create_itinerary_section(trip_data, start_day=1, end_day=3))
+        
         story.append(PageBreak())
         
-        # PAGE 2: SUMMARY
-        story.extend(self.create_summary_page(trip_data))
-        story.append(PageBreak())
+        # --- PAGE 2 ---
+        # 5. Day by Day (Top 20% - Days 4-5)
+        story.append(self.create_itinerary_section(trip_data, start_day=4, end_day=5))
+        story.append(Spacer(1, 0.1*inch))
         
-        # PAGES 3-7: DAY BY DAY
-        for day_num, day_data in enumerate(trip_data.get('itinerary', []), 1):
-            story.extend(self.create_day_page(day_num, day_data, trip_data))
-            if day_num < len(trip_data.get('itinerary', [])):
-                story.append(PageBreak())
+        # 6. Hotel & Weather (Middle 20%)
+        story.append(self.create_hotel_weather_section(trip_data))
+        story.append(Spacer(1, 0.1*inch))
         
-        story.append(PageBreak())
+        # 7. Packing & Currency (Middle 20%)
+        story.append(self.create_packing_currency_section(trip_data))
+        story.append(Spacer(1, 0.1*inch))
         
-        # PAGE 8: HOTEL
-        story.extend(self.create_hotel_page(trip_data))
-        story.append(PageBreak())
+        # 8. Footer Info (Emergency, Payment, Attachments) (Bottom 20%)
+        story.append(self.create_footer_info_section(trip_data))
+        story.append(Spacer(1, 0.1*inch))
         
-        # PAGE 9: WEATHER
-        story.extend(self.create_weather_page(trip_data))
-        story.append(PageBreak())
-        
-        # PAGE 10: PACKING
-        story.extend(self.create_packing_page(trip_data))
-        story.append(PageBreak())
-        
-        # PAGE 11: FLIGHT
-        story.extend(self.create_flight_page(trip_data))
-        story.append(PageBreak())
-        
-        # PAGE 12: EMERGENCY
-        story.extend(self.create_emergency_page(trip_data))
-        story.append(PageBreak())
-        
-        # PAGE 13: CURRENCY & TIPS
-        story.extend(self.create_currency_page(trip_data))
-        story.append(PageBreak())
-        
-        # PAGE 14: PAYMENT
-        story.extend(self.create_payment_page(trip_data))
-        story.append(PageBreak())
-        
-        # PAGE 15: ATTACHMENTS
-        story.extend(self.create_attachments_page(trip_data))
-        story.append(PageBreak())
-        
-        # PAGE 16: THANK YOU
-        story.extend(self.create_thankyou_page())
+        # 9. Thank You
+        story.append(self.create_thank_you_section())
         
         doc.build(story)
         print(f"✓ PDF created successfully: {output_path}")
-    
-    def create_cover_page(self, trip_data):
-        """Create magazine-style cover page"""
-        elements = []
-        
+
+    def create_cover_section(self, trip_data):
         destination = trip_data.get('destination', 'Dream Destination')
         start_date = trip_data.get('start_date', '2025-03-12')
         end_date = trip_data.get('end_date', '2025-03-16')
         travelers = trip_data.get('travelers', '2 Adults, 1 Child')
         
-        # Get image
-        img_pil = self.get_image(destination, "destination cover travel")
+        # Image
+        img_pil = self.get_image(destination, "destination cover travel", 1200, 500)
         img_bytes = self.image_to_bytes(img_pil)
+        img = Image(img_bytes, width=7.5*inch, height=2.8*inch)
         
-        # Add image
-        img = Image(img_bytes, width=6.8*inch, height=5*inch)
-        elements.append(img)
-        elements.append(Spacer(1, 0.3*inch))
+        # Text Overlay (Simulated with Table)
+        title_style = ParagraphStyle('CoverTitle', fontSize=32, textColor=COLORS['primary_gradient_1'], fontName='Helvetica-Bold', alignment=TA_CENTER)
+        subtitle_style = ParagraphStyle('Subtitle', fontSize=14, textColor=COLORS['accent_gold'], fontName='Helvetica', alignment=TA_CENTER)
+        info_style = ParagraphStyle('Info', fontSize=10, textColor=COLORS['dark_text'], alignment=TA_CENTER)
         
-        # Calculate duration
         start = datetime.strptime(start_date, '%Y-%m-%d')
         end = datetime.strptime(end_date, '%Y-%m-%d')
         duration = (end - start).days
         
-        # Title
-        title_style = ParagraphStyle(
-            'CoverTitle',
-            fontSize=52,
-            textColor=COLORS['primary_gradient_1'],
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            spaceAfter=15,
-        )
-        elements.append(Paragraph(f"{duration} Days • {destination}", title_style))
-        
-        # Subtitle
-        subtitle_style = ParagraphStyle(
-            'Subtitle',
-            fontSize=18,
-            textColor=COLORS['accent_gold'],
-            alignment=TA_CENTER,
-            fontName='Helvetica',
-            spaceAfter=15,
-        )
-        elements.append(Paragraph("Your Personalized TravelOrbit Itinerary", subtitle_style))
-        
-        # Info
-        info_style = ParagraphStyle(
-            'Info',
-            fontSize=12,
-            textColor=COLORS['dark_text'],
-            alignment=TA_CENTER,
-            spaceAfter=8,
-        )
-        elements.append(Paragraph(f"📅 {start_date} – {end_date}", info_style))
-        elements.append(Paragraph(f"👥 {travelers}", info_style))
-        elements.append(Spacer(1, 0.2*inch))
-        
-        # Paid stamp
-        paid_style = ParagraphStyle(
-            'PaidStamp',
-            fontSize=28,
-            textColor=COLORS['accent_gold'],
-            alignment=TA_RIGHT,
-            fontName='Helvetica-Bold',
-        )
-        elements.append(Paragraph("✓ PAID", paid_style))
-        
-        return elements
-    
-    def create_summary_page(self, trip_data):
-        """Create trip summary page"""
-        elements = []
-        
-        # Header
-        header_style = ParagraphStyle(
-            'Header',
-            fontSize=36,
-            textColor=COLORS['primary_gradient_1'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=30,
-        )
-        elements.append(Paragraph("Trip Summary", header_style))
-        
-        destination = trip_data.get('destination', 'Destination')
-        hotel = trip_data.get('hotel_name', 'Hotel')
-        cost = trip_data.get('total_cost', '₹1,32,500')
-        duration = trip_data.get('duration', '5 Days')
-        package = trip_data.get('package_type', 'Luxury')
-        
-        # Summary table
-        summary_data = [
-            [Paragraph("📅 <b>Duration</b>", ParagraphStyle('', fontSize=11, textColor=COLORS['dark_text'])), 
-             Paragraph(duration, ParagraphStyle('', fontSize=11, textColor=COLORS['dark_text']))],
-            [Paragraph("🏨 <b>Hotel</b>", ParagraphStyle('', fontSize=11, textColor=COLORS['dark_text'])), 
-             Paragraph(hotel, ParagraphStyle('', fontSize=11, textColor=COLORS['dark_text']))],
-            [Paragraph("💼 <b>Package</b>", ParagraphStyle('', fontSize=11, textColor=COLORS['dark_text'])), 
-             Paragraph(package, ParagraphStyle('', fontSize=11, textColor=COLORS['dark_text']))],
-            [Paragraph("💰 <b>Total Cost</b>", ParagraphStyle('', fontSize=11, textColor=COLORS['dark_text'])), 
-             Paragraph(f"{cost} — PAID", ParagraphStyle('', fontSize=11, textColor=COLORS['accent_green']))],
+        text_content = [
+            Paragraph(f"{duration} Days • {destination} Luxury Escape", title_style),
+            Paragraph("Your Personalized TravelOrbit Itinerary", subtitle_style),
+            Paragraph(f"📅 {start_date} – {end_date} • 👥 {travelers}", info_style),
         ]
         
-        table = Table(summary_data, colWidths=[2.2*inch, 4.1*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), COLORS['accent_purple']),
-            ('BACKGROUND', (1, 0), (1, -1), COLORS['accent_pink']),
-            ('PADDING', (0, 0), (-1, -1), 12),
-            ('GRID', (0, 0), (-1, -1), 1, COLORS['primary_gradient_2']),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        # Paid Stamp
+        paid_style = ParagraphStyle('Paid', fontSize=14, textColor=COLORS['accent_green'], fontName='Helvetica-Bold', alignment=TA_RIGHT)
+        text_content.append(Paragraph("✓ PAID", paid_style))
+        
+        return Table([[img], [Table([[c] for c in text_content], style=TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER')]))]], 
+                     style=TableStyle([('ALIGN', (0,0), (-1,-1), 'CENTER'), ('LEFTPADDING', (0,0), (-1,-1), 0), ('RIGHTPADDING', (0,0), (-1,-1), 0)]))
+
+    def create_summary_section(self, trip_data):
+        # Summary
+        summary_style = ParagraphStyle('Sum', fontSize=10, leading=12)
+        summary_header = ParagraphStyle('SumHead', fontSize=12, fontName='Helvetica-Bold', textColor=COLORS['primary_gradient_1'])
+        
+        # Create a horizontal summary bar
+        data = [
+            [
+                Paragraph("<b>QUICK SUMMARY</b>", summary_header),
+                Paragraph(f"<b>Duration:</b><br/>{trip_data.get('duration', '5 Days')}", summary_style),
+                Paragraph(f"<b>Package:</b><br/>{trip_data.get('package_type', 'Luxury')}", summary_style),
+                Paragraph(f"<b>Hotel:</b><br/>{trip_data.get('hotel_name', 'Sun Island Resort')}", summary_style),
+                Paragraph(f"<b>Total Cost:</b><br/>{trip_data.get('total_cost', '₹1,32,500')}", summary_style),
+            ]
+        ]
+        
+        t = Table(data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), COLORS['ticket_bg']),
+            ('BOX', (0,0), (-1,-1), 1, COLORS['primary_gradient_2']),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('PADDING', (0,0), (-1,-1), 8),
         ]))
-        elements.append(table)
-        elements.append(Spacer(1, 0.3*inch))
+        return t
+
+    def create_boarding_pass(self, trip_data):
+        """Create a realistic-looking fake boarding pass"""
         
-        # Welcome text
-        welcome_style = ParagraphStyle(
-            'Welcome',
-            fontSize=12,
-            textColor=COLORS['dark_text'],
-            alignment=TA_JUSTIFY,
-            leading=18,
-        )
-        welcome = (
-            f"<b>Welcome to your dream getaway!</b><br/><br/>"
-            f"This itinerary is crafted specially for your {destination} trip. "
-            f"Enjoy a relaxing, picture-perfect vacation customized by TravelOrbit AI. "
-            f"Every moment has been planned to ensure you have the most memorable experience."
-        )
-        elements.append(Paragraph(welcome, welcome_style))
+        # Styles
+        label_style = ParagraphStyle('BPLabel', fontSize=7, textColor='grey', fontName='Helvetica')
+        value_style = ParagraphStyle('BPValue', fontSize=10, textColor='black', fontName='Helvetica-Bold')
+        large_code_style = ParagraphStyle('BPCode', fontSize=24, textColor=COLORS['primary_gradient_1'], fontName='Helvetica-Bold')
         
-        return elements
-    
-    def create_day_page(self, day_num, day_data, trip_data):
-        """Create day page"""
-        elements = []
+        # Data
+        airline = "Air India Express"
+        flight_no = "AI-123"
+        pnr = "ABC123XYZ"
+        date = "12 MAR 2025"
+        time = "06:00 AM"
+        gate = "A4"
+        seat = "12A"
         
-        destination = trip_data.get('destination', 'Destination')
-        title = day_data.get('title', f'Day {day_num}')
-        description = day_data.get('description', 'Explore and enjoy!')
-        activities = day_data.get('activities', [])
+        # Barcode
+        barcode = code128.Code128(pnr, barHeight=0.4*inch, barWidth=1.2)
         
-        # Header
-        header_style = ParagraphStyle(
-            'DayHeader',
-            fontSize=32,
-            textColor=COLORS['primary_gradient_2'],
-            fontName='Helvetica-Bold',
-            alignment=TA_LEFT,
-            spaceAfter=20,
-        )
-        elements.append(Paragraph(f"DAY {day_num} — {title}", header_style))
-        
-        # Image
-        img_pil = self.get_image(destination, f"{title} {destination} travel")
-        img_bytes = self.image_to_bytes(img_pil)
-        img = Image(img_bytes, width=5.5*inch, height=3.5*inch)
-        elements.append(img)
-        elements.append(Spacer(1, 0.15*inch))
-        
-        # Description
-        desc_style = ParagraphStyle(
-            'Description',
-            fontSize=11,
-            textColor=COLORS['dark_text'],
-            alignment=TA_JUSTIFY,
-            leading=16,
-            spaceAfter=15,
-        )
-        elements.append(Paragraph(description, desc_style))
-        
-        # Activities
-        activities_style = ParagraphStyle(
-            'Activity',
-            fontSize=10,
-            textColor=COLORS['dark_text'],
-            spaceAfter=8,
-        )
-        
-        elements.append(Paragraph("<b>Activities & Timeline:</b>", activities_style))
-        
-        emojis = ['✈', '🚗', '🏨', '🍽', '🌅', '🏖', '🎭', '📸']
-        for idx, activity in enumerate(activities):
-            emoji = emojis[idx % len(emojis)]
-            elements.append(Paragraph(f"{emoji} {activity}", activities_style))
-        
-        elements.append(Spacer(1, 0.1*inch))
-        elements.append(Paragraph("<u>📍 View on Google Maps</u>", activities_style))
-        
-        return elements
-    
-    def create_hotel_page(self, trip_data):
-        """Create hotel page"""
-        elements = []
-        
-        header_style = ParagraphStyle(
-            'Header',
-            fontSize=36,
-            textColor=COLORS['accent_pink'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=25,
-        )
-        elements.append(Paragraph("🏨 Hotel Details", header_style))
-        
-        # Hotel image
-        img_pil = self.get_image(trip_data.get('destination', 'Hotel'), "luxury resort hotel")
-        img_bytes = self.image_to_bytes(img_pil)
-        img = Image(img_bytes, width=5.5*inch, height=3.5*inch)
-        elements.append(img)
-        elements.append(Spacer(1, 0.15*inch))
-        
-        # Hotel info
-        hotel_style = ParagraphStyle(
-            'HotelInfo',
-            fontSize=13,
-            fontName='Helvetica-Bold',
-            textColor=COLORS['dark_text'],
-            spaceAfter=10,
-        )
-        
-        elements.append(Paragraph(trip_data.get('hotel_name', 'Luxury Resort'), hotel_style))
-        elements.append(Paragraph(f"Rating: {trip_data.get('hotel_rating', '⭐⭐⭐⭐⭐')}", hotel_style))
-        elements.append(Paragraph(f"Check-in: {trip_data.get('start_date', '2025-03-12')}", hotel_style))
-        elements.append(Paragraph(f"Check-out: {trip_data.get('end_date', '2025-03-16')}", hotel_style))
-        elements.append(Spacer(1, 0.2*inch))
-        
-        # Amenities
-        elements.append(Paragraph("<b>Amenities:</b>", hotel_style))
-        
-        amenities_data = [
-            [Paragraph("🛏 Room", ParagraphStyle('', fontSize=10, textColor=COLORS['dark_text'])),
-             Paragraph("🍳 Breakfast", ParagraphStyle('', fontSize=10, textColor=COLORS['dark_text'])),
-             Paragraph("🏖 Beach Access", ParagraphStyle('', fontSize=10, textColor=COLORS['dark_text']))],
-            [Paragraph("🧖 Spa", ParagraphStyle('', fontSize=10, textColor=COLORS['dark_text'])),
-             Paragraph("📶 WiFi", ParagraphStyle('', fontSize=10, textColor=COLORS['dark_text'])),
-             Paragraph("🏋 Gym", ParagraphStyle('', fontSize=10, textColor=COLORS['dark_text']))],
+        # Left Section (Main Ticket)
+        left_data = [
+            [Paragraph(f"✈ {airline}", ParagraphStyle('Air', fontSize=12, fontName='Helvetica-Bold', textColor=COLORS['primary_gradient_2'])), '', '', Paragraph("BOARDING PASS", ParagraphStyle('BPTitle', fontSize=10, alignment=TA_RIGHT, textColor='grey'))],
+            [Paragraph("PASSENGER NAME", label_style), Paragraph("FLIGHT", label_style), Paragraph("DATE", label_style), Paragraph("TIME", label_style)],
+            [Paragraph(trip_data.get('travelers', 'Guest').split(',')[0], value_style), Paragraph(flight_no, value_style), Paragraph(date, value_style), Paragraph(time, value_style)],
+            [Paragraph("FROM", label_style), Paragraph("TO", label_style), Paragraph("GATE", label_style), Paragraph("SEAT", label_style)],
+            [Paragraph("DELHI (DEL)", value_style), Paragraph(f"{trip_data.get('destination', 'MALDIVES').upper()} (MLE)", value_style), Paragraph(gate, value_style), Paragraph(seat, value_style)],
         ]
         
-        table = Table(amenities_data, colWidths=[2*inch, 2*inch, 2*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), COLORS['accent_purple']),
-            ('PADDING', (0, 0), (-1, -1), 15),
-            ('GRID', (0, 0), (-1, -1), 1, COLORS['primary_gradient_1']),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        t_left = Table(left_data, colWidths=[2.2*inch, 1.0*inch, 1.0*inch, 1.0*inch])
+        t_left.setStyle(TableStyle([
+            ('SPAN', (0,0), (2,0)), # Airline Name span
+            ('BOTTOMPADDING', (0,0), (-1,0), 10),
+            ('TOPPADDING', (0,1), (-1,1), 5),
+            ('BOTTOMPADDING', (0,2), (-1,2), 10),
+            ('TOPPADDING', (0,3), (-1,3), 5),
         ]))
-        elements.append(table)
-        elements.append(Spacer(1, 0.2*inch))
         
-        # Contact
-        contact_style = ParagraphStyle(
-            'Contact',
-            fontSize=10,
-            textColor=COLORS['dark_text'],
-            spaceAfter=8,
-        )
-        elements.append(Paragraph("<b>Contact Information:</b>", contact_style))
-        elements.append(Paragraph("📞 +960 123 4567", contact_style))
-        elements.append(Paragraph("🌐 www.sunislandresort.com", contact_style))
-        elements.append(Paragraph("📧 reservations@sunislandresort.com", contact_style))
-        
-        return elements
-    
-    def create_weather_page(self, trip_data):
-        """Create weather page"""
-        elements = []
-        
-        header_style = ParagraphStyle(
-            'Header',
-            fontSize=36,
-            textColor=COLORS['accent_orange'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=25,
-        )
-        elements.append(Paragraph("🌦 Weather Forecast", header_style))
-        
-        weather_data = [
-            [Paragraph("<b>Day</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("<b>Condition</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("<b>High</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("<b>Low</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("<b>Details</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold'))],
-            [Paragraph("Day 1", ParagraphStyle('', fontSize=9)), 
-             Paragraph("☀️ Sunny", ParagraphStyle('', fontSize=9)),
-             Paragraph("32°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("26°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("Perfect beach", ParagraphStyle('', fontSize=9))],
-            [Paragraph("Day 2", ParagraphStyle('', fontSize=9)), 
-             Paragraph("🌤️ Partly Cloudy", ParagraphStyle('', fontSize=9)),
-             Paragraph("31°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("25°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("Warm & pleasant", ParagraphStyle('', fontSize=9))],
-            [Paragraph("Day 3", ParagraphStyle('', fontSize=9)), 
-             Paragraph("⛅ Partly Cloudy", ParagraphStyle('', fontSize=9)),
-             Paragraph("30°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("24°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("Light breeze", ParagraphStyle('', fontSize=9))],
-            [Paragraph("Day 4", ParagraphStyle('', fontSize=9)), 
-             Paragraph("🌊 Rainy", ParagraphStyle('', fontSize=9)),
-             Paragraph("29°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("23°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("Afternoon rain", ParagraphStyle('', fontSize=9))],
-            [Paragraph("Day 5", ParagraphStyle('', fontSize=9)), 
-             Paragraph("☀️ Sunny", ParagraphStyle('', fontSize=9)),
-             Paragraph("32°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("26°C", ParagraphStyle('', fontSize=9)),
-             Paragraph("Clear skies", ParagraphStyle('', fontSize=9))],
+        # Right Section (Stub)
+        right_data = [
+            [Paragraph("BOARDING PASS", label_style)],
+            [Paragraph(trip_data.get('travelers', 'Guest').split(',')[0], value_style)],
+            [Paragraph(f"{flight_no} / {date}", value_style)],
+            [Paragraph(f"SEAT: <font size=14 color='#FF6B6B'>{seat}</font>", value_style)],
+            [barcode]
         ]
         
-        table = Table(weather_data, colWidths=[1*inch, 1.3*inch, 0.9*inch, 0.9*inch, 1.5*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), COLORS['accent_blue']),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('PADDING', (0, 0), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, COLORS['primary_gradient_1']),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [COLORS['accent_pink'], COLORS['accent_gold']]),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        t_right = Table(right_data, colWidths=[1.8*inch])
+        t_right.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('LEFTPADDING', (0,0), (-1,-1), 15),
         ]))
-        elements.append(table)
         
-        return elements
-    
-    def create_packing_page(self, trip_data):
-        """Create packing page"""
-        elements = []
-        
-        header_style = ParagraphStyle(
-            'Header',
-            fontSize=36,
-            textColor=COLORS['accent_pink'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=25,
-        )
-        elements.append(Paragraph("🧳 Packing Checklist", header_style))
-        
-        categories = {
-            'Essential Items': ['☑ Passport & Visas', '☑ Travel Insurance', '☑ Flight Tickets', '☑ Hotel Vouchers'],
-            'Clothing': ['☑ Lightweight clothes', '☑ Swim wear', '☑ Casual dresses', '☑ Evening wear'],
-            'Toiletries': ['☑ Sunscreen (SPF 50+)', '☑ Moisturizer', '☑ Deodorant', '☑ Medicines'],
-            'Accessories': ['☑ Sunglasses', '☑ Hat/Cap', '☑ Flip-flops', '☑ Watch'],
-            'Electronics': ['☑ Phone & Charger', '☑ Camera', '☑ Power bank', '☑ Adapter'],
-        }
-        
-        cat_style = ParagraphStyle(
-            'Category',
-            fontSize=11,
-            fontName='Helvetica-Bold',
-            textColor=COLORS['primary_gradient_1'],
-            spaceAfter=10,
-        )
-        
-        item_style = ParagraphStyle(
-            'Item',
-            fontSize=10,
-            textColor=COLORS['dark_text'],
-            spaceAfter=8,
-        )
-        
-        for category, items in categories.items():
-            elements.append(Paragraph(f"<b>{category}</b>", cat_style))
-            for item in items:
-                elements.append(Paragraph(item, item_style))
-            elements.append(Spacer(1, 0.1*inch))
-        
-        return elements
-    
-    def create_flight_page(self, trip_data):
-        """Create flight page"""
-        elements = []
-        
-        header_style = ParagraphStyle(
-            'Header',
-            fontSize=36,
-            textColor=COLORS['primary_gradient_1'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=25,
-        )
-        elements.append(Paragraph("🛫 Flight Information", header_style))
-        
-        flight_data = [
-            [Paragraph("<b>Airline</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("Air India Express", ParagraphStyle('', fontSize=10))],
-            [Paragraph("<b>Flight Number</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("AI-123", ParagraphStyle('', fontSize=10))],
-            [Paragraph("<b>PNR</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("ABC123XYZ", ParagraphStyle('', fontSize=10))],
-            [Paragraph("<b>Departure</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("12 March 2025 • 06:00 AM", ParagraphStyle('', fontSize=10))],
-            [Paragraph("<b>Arrival</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("12 March 2025 • 09:30 AM", ParagraphStyle('', fontSize=10))],
-            [Paragraph("<b>Terminal</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("Terminal 3", ParagraphStyle('', fontSize=10))],
-            [Paragraph("<b>Gate</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("TBD", ParagraphStyle('', fontSize=10))],
-            [Paragraph("<b>Baggage</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("20 kg (1 checked bag)", ParagraphStyle('', fontSize=10))],
-        ]
-        
-        table = Table(flight_data, colWidths=[2.2*inch, 4.1*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), COLORS['accent_gold']),
-            ('BACKGROUND', (1, 0), (1, -1), COLORS['accent_blue']),
-            ('PADDING', (0, 0), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, COLORS['primary_gradient_2']),
+        # Container Table
+        container = Table([[t_left, t_right]], colWidths=[5.4*inch, 2.0*inch])
+        container.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), colors.white),
+            ('BOX', (0,0), (-1,-1), 1, COLORS['ticket_border']),
+            # ('ROUNDEDCORNERS', [10, 10, 10, 10]), # Commented out as it might cause issues in some versions
+            ('LINEAFTER', (0,0), (0,-1), 1, COLORS['ticket_border'], 0, (3,3)),
+            ('LEFTPADDING', (0,0), (-1,-1), 0),
+            ('RIGHTPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
         ]))
-        elements.append(table)
         
-        return elements
-    
-    def create_emergency_page(self, trip_data):
-        """Create emergency page"""
-        elements = []
-        
-        header_style = ParagraphStyle(
-            'Header',
-            fontSize=36,
-            textColor=colors.red,
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=25,
-        )
-        elements.append(Paragraph("🚨 Emergency Contacts", header_style))
-        
-        contacts = [
-            [Paragraph("<b>Contact</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("<b>Number</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("<b>Available</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold'))],
-            [Paragraph("Hotel Desk", ParagraphStyle('', fontSize=9)),
-             Paragraph("+960 123 4567", ParagraphStyle('', fontSize=9)),
-             Paragraph("24/7", ParagraphStyle('', fontSize=9))],
-            [Paragraph("TravelOrbit Support", ParagraphStyle('', fontSize=9)),
-             Paragraph("+91 98765 43210", ParagraphStyle('', fontSize=9)),
-             Paragraph("24/7", ParagraphStyle('', fontSize=9))],
-            [Paragraph("Local Emergency", ParagraphStyle('', fontSize=9)),
-             Paragraph("911", ParagraphStyle('', fontSize=9)),
-             Paragraph("24/7", ParagraphStyle('', fontSize=9))],
-            [Paragraph("Ambulance", ParagraphStyle('', fontSize=9)),
-             Paragraph("+960 114", ParagraphStyle('', fontSize=9)),
-             Paragraph("24/7", ParagraphStyle('', fontSize=9))],
-            [Paragraph("Police", ParagraphStyle('', fontSize=9)),
-             Paragraph("+960 119", ParagraphStyle('', fontSize=9)),
-             Paragraph("24/7", ParagraphStyle('', fontSize=9))],
-        ]
-        
-        table = Table(contacts, colWidths=[2.2*inch, 2*inch, 1.5*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.red),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('PADDING', (0, 0), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, colors.red),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.lightgrey, colors.white]),
+        # Wrap in a background box for "pop"
+        wrapper = Table([[container]], colWidths=[7.5*inch])
+        wrapper.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,-1), COLORS['ticket_bg']),
+            ('PADDING', (0,0), (-1,-1), 10),
         ]))
-        elements.append(table)
         
-        return elements
-    
-    def create_currency_page(self, trip_data):
-        """Create currency page"""
-        elements = []
+        return wrapper
+
+    def create_itinerary_section(self, trip_data, start_day, end_day):
+        rows = []
+        header_style = ParagraphStyle('DayHead', fontSize=12, fontName='Helvetica-Bold', textColor=COLORS['primary_gradient_2'])
+        text_style = ParagraphStyle('DayText', fontSize=9, leading=11)
         
-        header_style = ParagraphStyle(
-            'Header',
-            fontSize=36,
-            textColor=COLORS['accent_gold'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=25,
-        )
-        elements.append(Paragraph("💱 Currency & Local Tips", header_style))
+        itinerary = trip_data.get('itinerary', [])
         
-        # Currency table
-        curr_data = [
-            [Paragraph("<b>INR</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("<b>USD</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("<b>EUR</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("<b>Local (MVR)</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold'))],
-            [Paragraph("₹100", ParagraphStyle('', fontSize=9)),
-             Paragraph("$1.20", ParagraphStyle('', fontSize=9)),
-             Paragraph("€1.10", ParagraphStyle('', fontSize=9)),
-             Paragraph("MVR 15.40", ParagraphStyle('', fontSize=9))],
-            [Paragraph("₹1,000", ParagraphStyle('', fontSize=9)),
-             Paragraph("$12.00", ParagraphStyle('', fontSize=9)),
-             Paragraph("€11.00", ParagraphStyle('', fontSize=9)),
-             Paragraph("MVR 154", ParagraphStyle('', fontSize=9))],
-            [Paragraph("₹10,000", ParagraphStyle('', fontSize=9)),
-             Paragraph("$120", ParagraphStyle('', fontSize=9)),
-             Paragraph("€110", ParagraphStyle('', fontSize=9)),
-             Paragraph("MVR 1,540", ParagraphStyle('', fontSize=9))],
-        ]
-        
-        table = Table(curr_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), COLORS['accent_gold']),
-            ('PADDING', (0, 0), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, COLORS['primary_gradient_1']),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [COLORS['accent_pink'], colors.white]),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        for i in range(start_day-1, min(end_day, len(itinerary))):
+            day = itinerary[i]
+            day_num = i + 1
+            
+            # Image
+            img_pil = self.get_image(trip_data.get('destination'), f"{day['title']} activity", 300, 200)
+            img = Image(self.image_to_bytes(img_pil), width=1.5*inch, height=1.0*inch)
+            
+            # Content
+            content = [
+                Paragraph(f"DAY {day_num} — {day['title']}", header_style),
+                Paragraph(day['description'][:150] + "...", text_style),
+                Paragraph(f"<b>Timeline:</b> {' → '.join(['✈', '🛥', '🏨', '🍽', '🌅'][:len(day.get('activities', []))])}", ParagraphStyle('Icons', fontSize=12, textColor=COLORS['accent_orange'])),
+                Paragraph("<u>View on Map</u>", ParagraphStyle('Link', fontSize=8, textColor='blue'))
+            ]
+            
+            rows.append([img, Table([[c] for c in content], style=TableStyle([('LEFTPADDING', (0,0), (-1,-1), 0)]))])
+            rows.append([Spacer(1, 5), Spacer(1, 5)]) # Divider space
+            
+        t = Table(rows, colWidths=[1.6*inch, 5.8*inch])
+        t.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('LINEBELOW', (0,0), (-1,-2), 0.5, COLORS['aqua_gradient']),
+            ('PADDING', (0,0), (-1,-1), 4)
         ]))
-        elements.append(table)
-        elements.append(Spacer(1, 0.3*inch))
+        return t
+
+    def create_hotel_weather_section(self, trip_data):
+        # Hotel
+        h_style = ParagraphStyle('H', fontSize=9)
+        h_head = ParagraphStyle('HH', fontSize=11, fontName='Helvetica-Bold', textColor=COLORS['accent_pink'])
         
-        # Tips
-        tips_style = ParagraphStyle(
-            'Tips',
-            fontSize=11,
-            textColor=COLORS['dark_text'],
-            spaceAfter=10,
-        )
-        
-        elements.append(Paragraph("<b>Local Tips & Etiquette:</b>", tips_style))
-        tips = [
-            "💡 Dress modestly when visiting local areas",
-            "💡 Learn basic local phrases like 'Salaam' (Hello)",
-            "💡 Respect local customs and traditions",
-            "💡 Best SIM cards available at airport",
-            "💡 Tipping is appreciated (5-10%)",
-            "💡 Avoid scams: Book tours through your hotel",
+        hotel_content = [
+            [Paragraph("<b>HOTEL DETAILS</b>", h_head)],
+            [Paragraph(f"<b>{trip_data.get('hotel_name')}</b>", ParagraphStyle('HB', fontSize=10, fontName='Helvetica-Bold'))],
+            [Paragraph("⭐⭐⭐⭐⭐", h_style)],
+            [Paragraph("Check-in: 12 Mar • Check-out: 16 Mar", h_style)],
+            [Paragraph("Amenities: 🛏 🍳 🏖 🧖 📶", ParagraphStyle('Am', fontSize=12))],
+            [Paragraph("<u>View Location</u>", ParagraphStyle('L', fontSize=8, textColor='blue'))]
         ]
         
-        tip_item_style = ParagraphStyle(
-            'TipItem',
-            fontSize=10,
-            textColor=COLORS['dark_text'],
-            spaceAfter=8,
-        )
-        
-        for tip in tips:
-            elements.append(Paragraph(tip, tip_item_style))
-        
-        return elements
-    
-    def create_payment_page(self, trip_data):
-        """Create payment page"""
-        elements = []
-        
-        header_style = ParagraphStyle(
-            'Header',
-            fontSize=36,
-            textColor=COLORS['accent_green'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=30,
-        )
-        elements.append(Paragraph("✔ Payment Received", header_style))
-        
-        # Amount
-        amount_style = ParagraphStyle(
-            'Amount',
-            fontSize=48,
-            textColor=COLORS['accent_gold'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=30,
-        )
-        cost = trip_data.get('total_cost', '₹1,32,500')
-        elements.append(Paragraph(f"{cost}", amount_style))
-        
-        # Status
-        status_style = ParagraphStyle(
-            'Status',
-            fontSize=24,
-            textColor=COLORS['accent_green'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=30,
-        )
-        elements.append(Paragraph("✓ PAYMENT CONFIRMED", status_style))
-        
-        # Payment details
-        payment_data = [
-            [Paragraph("<b>Payment Method</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("Razorpay", ParagraphStyle('', fontSize=10))],
-            [Paragraph("<b>Transaction ID</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph("pay_2A8hf7sK9L2pQx", ParagraphStyle('', fontSize=10))],
-            [Paragraph("<b>Payment Date</b>", ParagraphStyle('', fontSize=10, fontName='Helvetica-Bold')),
-             Paragraph(f"{datetime.now().strftime('%d %B %Y')}", ParagraphStyle('', fontSize=10))],
+        # Weather
+        w_content = [
+            [Paragraph("<b>WEATHER FORECAST</b>", ParagraphStyle('WH', fontSize=11, fontName='Helvetica-Bold', textColor=COLORS['accent_orange']))],
+            [Table([
+                [Paragraph("Day 1", h_style), Paragraph("☀️ 32°C", h_style)],
+                [Paragraph("Day 2", h_style), Paragraph("🌤 31°C", h_style)],
+                [Paragraph("Day 3", h_style), Paragraph("⛅ 30°C", h_style)],
+            ], style=TableStyle([('GRID', (0,0), (-1,-1), 0.5, 'lightgrey')]))]
         ]
         
-        table = Table(payment_data, colWidths=[2.2*inch, 4.1*inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), COLORS['accent_green']),
-            ('BACKGROUND', (1, 0), (1, -1), COLORS['accent_blue']),
-            ('PADDING', (0, 0), (-1, -1), 12),
-            ('GRID', (0, 0), (-1, -1), 1, COLORS['accent_green']),
-        ]))
-        elements.append(table)
-        elements.append(Spacer(1, 0.3*inch))
+        t1 = Table(hotel_content, colWidths=[3.6*inch])
+        t1.setStyle(TableStyle([('BOX', (0,0), (-1,-1), 1, COLORS['accent_pink']), ('PADDING', (0,0), (-1,-1), 6)]))
         
-        # Included
-        elements.append(Paragraph("<b>Included Services:</b>", ParagraphStyle('', fontSize=11, fontName='Helvetica-Bold', textColor=COLORS['dark_text'])))
+        t2 = Table(w_content, colWidths=[3.6*inch])
+        t2.setStyle(TableStyle([('BOX', (0,0), (-1,-1), 1, COLORS['accent_orange']), ('PADDING', (0,0), (-1,-1), 6)]))
         
-        services = [
-            "✓ 5 Nights Accommodation at Sun Island Resort",
-            "✓ Daily Breakfast & Dinner",
-            "✓ Airport Transfers",
-            "✓ Guided Island Tours",
-            "✓ 24/7 Concierge Support",
+        return Table([[t1, t2]], colWidths=[3.75*inch, 3.75*inch])
+
+    def create_packing_currency_section(self, trip_data):
+        # Packing
+        p_style = ParagraphStyle('P', fontSize=9)
+        p_head = ParagraphStyle('PH', fontSize=11, fontName='Helvetica-Bold', textColor=COLORS['accent_purple'])
+        
+        pack_content = [
+            [Paragraph("<b>PACKING CHECKLIST</b>", p_head)],
+            [Paragraph("• Passport, Tickets, Insurance", p_style)],
+            [Paragraph("• Sunscreen, Swimwear, Hat", p_style)],
+            [Paragraph("• Chargers, Powerbank, Adapter", p_style)],
+            [Paragraph("• Light cotton clothes", p_style)]
         ]
         
-        service_style = ParagraphStyle(
-            'Service',
-            fontSize=10,
-            textColor=COLORS['dark_text'],
-            spaceAfter=8,
-        )
-        
-        for service in services:
-            elements.append(Paragraph(service, service_style))
-        
-        return elements
-    
-    def create_attachments_page(self, trip_data):
-        """Create attachments page"""
-        elements = []
-        
-        header_style = ParagraphStyle(
-            'Header',
-            fontSize=36,
-            textColor=COLORS['primary_gradient_2'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=25,
-        )
-        elements.append(Paragraph("📎 Attachments", header_style))
-        
-        attachment_style = ParagraphStyle(
-            'Attachment',
-            fontSize=11,
-            textColor=COLORS['dark_text'],
-            spaceAfter=15,
-        )
-        
-        attachments = [
-            "📄 Flight E-Ticket (Air India Express)",
-            "📄 Hotel Voucher (Sun Island Resort)",
-            "📄 Travel Insurance Document",
-            "📄 Visa Approval (if applicable)",
-            "📄 Activity Booking Confirmations",
-            "📄 Restaurant Reservations",
-            "📄 Emergency Contact Card",
+        # Currency
+        c_content = [
+            [Paragraph("<b>CURRENCY & TIPS</b>", ParagraphStyle('CH', fontSize=11, fontName='Helvetica-Bold', textColor=COLORS['accent_gold']))],
+            [Paragraph("<b>1 USD = 15.4 MVR</b>", p_style)],
+            [Paragraph("Meal: ~150 MVR | Taxi: ~50 MVR", p_style)],
+            [Paragraph("• Dress modestly in local areas", p_style)],
+            [Paragraph("• Tipping 5-10% appreciated", p_style)]
         ]
         
-        for attachment in attachments:
-            elements.append(Paragraph(attachment, attachment_style))
+        t1 = Table(pack_content, colWidths=[3.6*inch])
+        t1.setStyle(TableStyle([('BOX', (0,0), (-1,-1), 1, COLORS['accent_purple']), ('PADDING', (0,0), (-1,-1), 6)]))
         
-        return elements
-    
-    def create_thankyou_page(self):
-        """Create thank you page"""
-        elements = []
+        t2 = Table(c_content, colWidths=[3.6*inch])
+        t2.setStyle(TableStyle([('BOX', (0,0), (-1,-1), 1, COLORS['accent_gold']), ('PADDING', (0,0), (-1,-1), 6)]))
         
-        elements.append(Spacer(1, 1.8*inch))
+        return Table([[t1, t2]], colWidths=[3.75*inch, 3.75*inch])
+
+    def create_footer_info_section(self, trip_data):
+        f_style = ParagraphStyle('F', fontSize=8)
+        f_head = ParagraphStyle('FH', fontSize=10, fontName='Helvetica-Bold')
         
-        thankyou_style = ParagraphStyle(
-            'ThankYou',
-            fontSize=56,
-            textColor=COLORS['accent_pink'],
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER,
-            spaceAfter=40,
-        )
-        elements.append(Paragraph("Have a wonderful<br/>journey!", thankyou_style))
+        # Emergency
+        e_col = [
+            Paragraph("<b>EMERGENCY</b>", ParagraphStyle('EH', fontSize=10, fontName='Helvetica-Bold', textColor='red')),
+            Paragraph("Hotel: +960 123 4567", f_style),
+            Paragraph("Police: 119", f_style),
+            Paragraph("Support: +91 98765", f_style)
+        ]
         
-        powered_style = ParagraphStyle(
-            'Powered',
-            fontSize=20,
-            textColor=COLORS['primary_gradient_1'],
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            spaceAfter=30,
-        )
-        elements.append(Paragraph("✈ Powered by TravelOrbit AI", powered_style))
+        # Payment
+        pay_col = [
+            Paragraph("<b>PAYMENT</b>", ParagraphStyle('PH', fontSize=10, fontName='Helvetica-Bold', textColor='green')),
+            Paragraph("Total: ₹1,32,500", f_style),
+            Paragraph("Status: PAID", f_style),
+            Paragraph("Via: Razorpay", f_style)
+        ]
         
-        contact_style = ParagraphStyle(
-            'Contact',
-            fontSize=11,
-            textColor=COLORS['dark_text'],
-            alignment=TA_CENTER,
-        )
-        elements.append(Paragraph("www.travelorbit.com | support@travelorbit.com", contact_style))
+        # Attachments
+        att_col = [
+            Paragraph("<b>ATTACHMENTS</b>", ParagraphStyle('AH', fontSize=10, fontName='Helvetica-Bold', textColor='blue')),
+            Paragraph("• Flight Ticket", f_style),
+            Paragraph("• Hotel Voucher", f_style),
+            Paragraph("• Insurance", f_style)
+        ]
         
-        return elements
+        return Table([[e_col, pay_col, att_col]], colWidths=[2.5*inch, 2.5*inch, 2.5*inch], 
+                     style=TableStyle([('GRID', (0,0), (-1,-1), 0.5, 'lightgrey'), ('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 6)]))
+
+    def create_thank_you_section(self):
+        return Paragraph("Have a wonderful journey! • Powered by TravelOrbit AI", 
+                         ParagraphStyle('Thanks', fontSize=12, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=COLORS['primary_gradient_1']))
 
 
 # Sample trip data

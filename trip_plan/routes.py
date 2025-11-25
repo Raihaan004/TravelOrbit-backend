@@ -505,6 +505,52 @@ def update_passengers(trip_id: str,
     return {"message": "Passengers updated successfully"}
 
 
+# -------- Add-ons --------
+@router.post("/trip-plan/{trip_id}/addons")
+def update_addons(trip_id: str,
+                  payload: schemas.TripAddonsUpdate,
+                  db: Session = Depends(get_db)):
+    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    # Calculate cost: 2000 INR per day for Guide & Photographer
+    days = trip.duration_days or 1
+    cost = 2000 * days
+    
+    current_total = trip.total_price or 0
+    current_addon_cost = trip.guide_photographer_cost or 0
+    
+    if payload.include_guide_photographer:
+        # If already included, do nothing or update if cost changed (simplified here)
+        if not trip.include_guide_photographer:
+            trip.include_guide_photographer = 1
+            trip.guide_photographer_cost = cost
+            trip.total_price = current_total + cost
+    else:
+        # If removing
+        if trip.include_guide_photographer:
+            trip.include_guide_photographer = 0
+            trip.total_price = max(0, current_total - current_addon_cost)
+            trip.guide_photographer_cost = 0
+            
+    # Update ownership if needed
+    if payload.register_id:
+        trip.register_id = payload.register_id
+    if payload.email:
+        trip.email = payload.email
+
+    db.add(trip)
+    db.commit()
+    
+    return {
+        "message": "Add-ons updated", 
+        "total_price": trip.total_price,
+        "guide_photographer_cost": trip.guide_photographer_cost,
+        "include_guide_photographer": bool(trip.include_guide_photographer)
+    }
+
+
 # -------- Feedback --------
 @router.post("/trip-plan/{trip_id}/feedback")
 def create_feedback(trip_id: str,

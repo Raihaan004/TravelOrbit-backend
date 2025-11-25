@@ -138,9 +138,11 @@ class TripDetail(BaseModel):
     ai_summary_text: Optional[str]
     ai_summary_json: Optional[Any]
     passengers: Optional[Any]
-    contact_phone: Optional[str]
+    contact_phone: Optional[str] = None
     is_mystery_trip: Optional[int] = 0
     mystery_preferences: Optional[Any] = None
+    include_guide_photographer: Optional[int] = 0
+    guide_photographer_cost: Optional[float] = 0.0
 
     class Config:
         from_attributes = True
@@ -262,3 +264,10 @@ class GroupDetailResponse(BaseModel):
     members: List[dict]  # {email, status}
     votes: List[dict]  # simplified vote info
     destination_options: Optional[List[str]] = None
+
+
+# ----- Add-ons Update -----
+class TripAddonsUpdate(BaseModel):
+    register_id: str
+    email: EmailStr
+    include_guide_photographer: bool

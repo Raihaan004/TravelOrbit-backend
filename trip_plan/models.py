@@ -52,6 +52,10 @@ class Trip(Base):
     # Deal booking flag
     is_deal_booking = Column(Integer, default=0)  # 1 = from deal, 0 = regular planning
 
+    # Travel Guide & Photographer
+    include_guide_photographer = Column(Integer, default=0) # 0 = No, 1 = Yes
+    guide_photographer_cost = Column(Numeric, default=0.0)
+
     # Mystery Trip
     is_mystery_trip = Column(Integer, default=0) # 1 = mystery trip
     mystery_preferences = Column(JSONB, nullable=True) # { "location_type": "india", "theme": "adventure" }
