@@ -160,10 +160,16 @@ async def call_openrouter(messages: List[Dict]) -> str:
 
     print(f"DEBUG: Sending to OpenRouter - Model: {OPENROUTER_MODEL}, Messages: {len(filtered_messages)}")
 
-    async with httpx.AsyncClient(timeout=60) as client:
-      resp = await client.post(url, headers=headers, json=payload)
+    async with httpx.AsyncClient(timeout=10) as client:
       try:
-        resp.raise_for_status()
+          resp = await client.post(url, headers=headers, json=payload)
+          resp.raise_for_status()
+      except httpx.TimeoutException:
+          print("OpenRouter API timed out after 10s")
+          # Return a fallback message instead of crashing
+          fallback_human = "I'm taking a bit too long to think. Could you please try asking that again?"
+          fallback_json = {"is_final_itinerary": False, "updated_fields": {}}
+          return fallback_human + "\n---JSON---\n" + json.dumps(fallback_json)
       except httpx.HTTPStatusError:
         # Log response body for debugging
         try:

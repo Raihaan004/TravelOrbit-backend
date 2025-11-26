@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -45,6 +45,20 @@ def root():
             "whatsapp_status": "/whatsapp/status",
             "whatsapp_setup": "/whatsapp/setup-guide"
         }
+    }
+
+@app.post("/")
+async def root_post_handler(request: Request):
+    """
+    Catch-all for misconfigured webhooks pointing to root.
+    Returns a message that the bot can display to the user/admin.
+    """
+    return {
+        "replies": [
+            {
+                "text": "⚠️ Configuration Error: The Webhook URL is set to the root domain. Please update it in Zoho SalesIQ to: .../webhooks/salesiq"
+            }
+        ]
     }
 
 @app.get("/vote/{short_code}")
